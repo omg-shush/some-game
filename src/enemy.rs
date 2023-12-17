@@ -18,7 +18,7 @@ pub struct EnemySpawner {
 }
 
 #[derive(Component)]
-struct Enemy {}
+pub struct Enemy {}
 
 fn update_spawners(mut commands: Commands, mut spawners: Query<(&mut EnemySpawner, &Transform)>, time: Res<Time>) {
     for (mut spawner, transform) in spawners.iter_mut() {

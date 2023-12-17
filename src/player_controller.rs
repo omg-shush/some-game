@@ -19,7 +19,7 @@ pub struct PlayerController {
 pub struct CursorSprite {}
 
 pub struct Cursor {
-    pos: Vec2
+    pub pos: Vec2
 }
 
 impl Resource for Cursor {}
@@ -62,7 +62,6 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>, mut window: Que
 }
 
 fn update_mouse(
-    mut player: Query<(&mut PlayerController, &mut Transform), Without<CursorSprite>>,
     mut cursor_sprite: Query<(&mut Transform, &mut Visibility), With<CursorSprite>>,
     mut cursor_res: ResMut<Cursor>,
     mut cursor_events: EventReader<CursorMoved>,
