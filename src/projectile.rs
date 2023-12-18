@@ -67,18 +67,18 @@ fn collide(
                     {
                         // Hit player
                         commands.entity(player_entity).despawn_recursive();
+                        commands.entity(projectile_entity).despawn_recursive();
+                        break;
                     }
                 }
             }
             ProjectileHits::Enemy => {
                 for (enemy_entity, enemy, enemy_transform) in enemies.iter() {
-                    if projectile_transform
-                        .translation
-                        .distance(enemy_transform.translation)
-                        < 10.
-                    {
+                    if projectile_transform.translation.distance(enemy_transform.translation) < 30. {
                         // Hit enemy
                         commands.entity(enemy_entity).despawn_recursive();
+                        commands.entity(projectile_entity).despawn_recursive();
+                        break;
                     }
                 }
             }

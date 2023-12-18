@@ -49,7 +49,7 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
                 ..default()
             },
             image: asset_server.load("enemy.png"),
-            timer: Timer::from_seconds(3., TimerMode::Once),
+            timer: Timer::from_seconds(3., TimerMode::Repeating),
         },
         TransformBundle {
             local: Transform::from_translation(Vec3::new(100., 0., 0.5)),
