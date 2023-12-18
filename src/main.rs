@@ -70,7 +70,7 @@ fn player_shoot(
         let direction = (destination - position).normalize_or_zero();
         commands.spawn(Projectile {
             src: player.single().0,
-            velocity: direction * 100.,
+            velocity: direction * 150.,
             hits: ProjectileHits::Enemy,
             initial_position: position,
         });

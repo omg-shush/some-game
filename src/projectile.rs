@@ -41,9 +41,12 @@ fn added_projectile(
     }
 }
 
-fn step(mut projectiles: Query<(&Projectile, &mut Transform)>, time: Res<Time>) {
-    for (projectile, mut transform) in projectiles.iter_mut() {
+fn step(mut commands: Commands, mut projectiles: Query<(Entity, &Projectile, &mut Transform)>, time: Res<Time>) {
+    for (entity, projectile, mut transform) in projectiles.iter_mut() {
         transform.translation += projectile.velocity * time.delta_seconds();
+        if (transform.translation - projectile.initial_position).length() > 300. {
+            commands.entity(entity).despawn_recursive();
+        }
     }
 }
 
