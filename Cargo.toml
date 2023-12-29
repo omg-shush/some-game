@@ -8,3 +8,33 @@ edition = "2021"
 [dependencies]
 bevy = "0.12.1"
 bevy-inspector-egui = "0.21.0"
+bevy_renet = "0.0.10"
+bevy_replicon = "0.18.2"
+console_error_panic_hook = "0.1.7"
+js-sys = "0.3.66"
+serde = "1.0.193"
+serde-wasm-bindgen = "0.6.3"
+wasm-bindgen = "0.2.89"
+wasm-bindgen-futures = "0.4.39"
+
+[dependencies.web-sys]
+version = "0.3.22"
+features = [
+  "Window",
+  "Document",
+  "Location",
+  "WebSocket",
+  "RtcDataChannel",
+  "MessageEvent",
+  "RtcPeerConnection",
+  "RtcPeerConnectionIceEvent",
+  "RtcSessionDescriptionInit",
+  "RtcSdpType",
+  "RtcIceCandidateInit",
+  "RtcIceCandidate",
+  "RtcDataChannelEvent"
+]
+
+[dependencies.renet]
+version = "0.0.14"
+default-features = false

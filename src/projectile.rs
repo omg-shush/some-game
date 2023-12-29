@@ -2,11 +2,16 @@ use bevy::{prelude::*, sprite::Anchor};
 
 use crate::{enemy::Enemy, player::Player};
 
-pub struct ProjectilePlugin {}
+pub struct ProjectilePlugin {
+    pub is_server: bool
+}
 
 impl Plugin for ProjectilePlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Update, (added_projectile, step, collide));
+        app.add_systems(Update, (step, collide));
+        if !self.is_server {
+            app.add_systems(Update, added_projectile);
+        }
     }
 }
 

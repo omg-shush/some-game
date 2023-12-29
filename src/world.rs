@@ -2,11 +2,17 @@ use bevy::{prelude::*, utils::HashMap, sprite::{MaterialMesh2dBundle, Mesh2d}};
 
 const CHUNK_SIZE: usize = 64;
 
-pub struct WorldPlugin {}
+pub struct WorldPlugin {
+    pub is_server: bool
+}
 
 impl Plugin for WorldPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Startup, setup);
+        if self.is_server {
+            app.add_systems(Startup, setup_server);
+        } else {
+            app.add_systems(Startup, setup_client);
+        }
     }
 }
 
@@ -31,7 +37,11 @@ struct Chunk {
     image: Handle<Image>
 }
 
-fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
+fn setup_server(mut commands: Commands) {
+    // TODO
+}
+
+fn setup_client(mut commands: Commands, asset_server: Res<AssetServer>) {
     let image = asset_server.load("chunk_0_0.png");
     let mut chunks = HashMap::new();
     chunks.insert(ChunkCoord {x: 0, y: 0}, Chunk { image: image.clone() });
@@ -43,5 +53,5 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
         ..default()
     };
 
-    commands.spawn((world, sprite));
+    // commands.spawn((world, sprite));
 }
