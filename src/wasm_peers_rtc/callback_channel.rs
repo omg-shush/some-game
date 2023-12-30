@@ -56,11 +56,21 @@ impl SendRecvCallbackChannel {
             ws.channel.set_onopen(Some(on_open.as_ref().unchecked_ref()));
             on_open.forget();
         
+            let sender = ws.queue_sender.clone();
             let on_error = Closure::<dyn FnMut()>::new(move || {
-                console_warn!("Error in websocket!");
+                console_warn!("Error in channel!");
+                sender.close().unwrap();
             });
             ws.channel.set_onerror(Some(on_error.as_ref().unchecked_ref()));
             on_error.forget();
+
+            let sender = ws.queue_sender.clone();
+            let on_close = Closure::<dyn FnMut()>::new(move || {
+                console_warn!("Closing channel.");
+                sender.close().unwrap();
+            });
+            ws.channel.set_onclose(Some(on_close.as_ref().unchecked_ref()));
+            on_close.forget();
 
             let sender = ws.queue_sender.clone();
             let on_message = Closure::<dyn FnMut(_)>::new(move |e: MessageEvent| {
@@ -101,6 +111,10 @@ impl SendRecvCallbackChannel {
                 serde_wasm_bindgen::from_value(m).map_err(|e| Box::new(e) as Box<dyn Error>)
             })
             .collect()
+    }
+
+    pub fn is_closed(&self) -> bool {
+        self.queue_receiver.is_closed()
     }
 }
 

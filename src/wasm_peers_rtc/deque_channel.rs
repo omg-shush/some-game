@@ -17,6 +17,13 @@ impl<T> JsSender<T> {
         (channel.promise, channel.resolve) = JsDequeChannel::<T>::make_promise();
         Ok(())
     }
+
+    pub fn close(&self) -> Result<(), JsValue> {
+        let mut channel = self.channel.borrow_mut();
+        channel.resolve.call0(&JsValue::UNDEFINED)?;
+        channel.closed = true;
+        Ok(())
+    }
 }
 
 #[derive(Clone)]
@@ -32,16 +39,20 @@ impl<T> JsReceiver<T> {
             JsFuture::from(promise).await?;
         }
         let mut channel = self.channel.borrow_mut();
-        assert!(!channel.buffer.is_empty());
-        Ok(channel.buffer.pop_front().unwrap())
+        channel.buffer.pop_front().ok_or(JsValue::from_str("Empty channel!"))
     }
 
     pub fn drain(&self) -> Vec<T> {
         self.channel.borrow_mut().buffer.drain(..).collect::<Vec<_>>()
     }
+
+    pub fn is_closed(&self) -> bool {
+        self.channel.borrow().closed
+    }
 }
 
 pub struct JsDequeChannel<T> {
+    closed: bool,
     buffer: VecDeque<T>,
     promise: Promise,
     resolve: Function
@@ -51,6 +62,7 @@ impl<T> JsDequeChannel<T> {
     pub fn channel() -> (JsSender<T>, JsReceiver<T>) {
         let (promise, resolve) = Self::make_promise();
         let channel = Rc::new(RefCell::new(JsDequeChannel {
+            closed: false,
             buffer: VecDeque::new(),
             promise,
             resolve

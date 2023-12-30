@@ -1,4 +1,4 @@
-use bevy::{prelude::*, sprite::Anchor};
+use bevy::{prelude::*, sprite::Anchor, text::{Text2dBounds, TextLayoutInfo}};
 use bevy_replicon::{network_event::{EventType, client_event::{ClientEventAppExt, FromClient}}, replicon_core::replication_rules::{Replication, AppReplicationExt}};
 use serde::{Deserialize, Serialize};
 
@@ -15,7 +15,7 @@ impl Plugin for ProjectilePlugin {
         if self.is_server {
             app.add_systems(Update, (player_shoot, step, collide));
         } else {
-            app.add_systems(Update, added_projectile);
+            app.add_systems(Update, (update, added_projectile));
         }
     }
 }
@@ -34,6 +34,7 @@ pub struct Projectile {
     pub velocity: Vec3,
     pub hits: ProjectileHits,
     pub initial_position: Vec3,
+    pub min_dist: i32,
 }
 
 impl Default for Projectile {
@@ -42,7 +43,8 @@ impl Default for Projectile {
             src: Entity::PLACEHOLDER,
             velocity: Default::default(),
             hits: Default::default(),
-            initial_position: Default::default()
+            initial_position: Default::default(),
+            min_dist: -1,
         }
     }
 }
@@ -50,7 +52,7 @@ impl Default for Projectile {
 fn player_shoot(mut commands: Commands, mut reader: EventReader<FromClient<PlayerShootEvent>>) {
     for evt in reader.read() {
         let projectile = evt.event.projectile.clone();
-        commands.spawn((projectile, Position::from_translation(evt.event.projectile.initial_position.clone()), Replication));
+        commands.spawn((projectile, Position::from_translation(evt.event.projectile.initial_position.clone() + Vec3::Z * 3.), Replication));
     }
 }
 
@@ -66,15 +68,27 @@ fn added_projectile(
                 anchor: Anchor::Center,
                 ..default()
             },
-            VisibilityBundle::default()
+            VisibilityBundle::default(),
+            Text2dBounds::default(),
+            TextLayoutInfo::default(),
+            Text::from_section("", TextStyle { font: asset_server.load("OpenSans-Regular.ttf"), font_size: 48., color: Color::WHITE }),
+            Anchor::Center,
         ));
     }
 }
 
+fn update(
+    mut projectiles: Query<(&Projectile, &mut Text)>
+) {
+    // for (p, mut t) in projectiles.iter_mut() {
+    //     t.sections[0].value = format!("{}", p.min_dist);
+    // }
+}
+
 fn step(mut commands: Commands, mut projectiles: Query<(Entity, &Projectile, &mut Position)>, time: Res<Time>) {
-    for (entity, projectile, mut transform) in projectiles.iter_mut() {
-        transform.translation += projectile.velocity * time.delta_seconds();
-        if (transform.translation - projectile.initial_position).length() > 300. {
+    for (entity, projectile, mut position) in projectiles.iter_mut() {
+        position.translation += projectile.velocity * time.delta_seconds();
+        if (position.translation - projectile.initial_position).length() > 300. {
             commands.entity(entity).despawn_recursive();
         }
     }
@@ -82,11 +96,11 @@ fn step(mut commands: Commands, mut projectiles: Query<(Entity, &Projectile, &mu
 
 fn collide(
     mut commands: Commands,
-    projectiles: Query<(Entity, &Projectile, &Position)>,
+    mut projectiles: Query<(Entity, &mut Projectile, &Position)>,
     mut players: Query<(Entity, &Player, &Position, &mut Score)>,
     enemies: Query<(Entity, &Enemy, &Position)>
 ) {
-    for (projectile_entity, projectile, projectile_position) in projectiles.iter() {
+    for (projectile_entity, mut projectile, projectile_position) in projectiles.iter_mut() {
         match projectile.hits {
             ProjectileHits::Friendly => {
                 for (player_entity, player, player_position, player_score) in players.iter() {
@@ -103,8 +117,10 @@ fn collide(
                 }
             }
             ProjectileHits::Enemy => {
-                for (enemy_entity, enemy, enemy_transform) in enemies.iter() {
-                    if projectile_position.translation.distance(enemy_transform.translation) < 30. {
+                let mut min_distance = 100000;
+                for (enemy_entity, enemy, enemy_position) in enemies.iter() {
+                    let dist = projectile_position.translation.xy().distance(enemy_position.translation.xy());
+                    if dist < 40. {
                         // Hit enemy
                         commands.entity(enemy_entity).despawn_recursive();
                         commands.entity(projectile_entity).despawn_recursive();
@@ -114,7 +130,9 @@ fn collide(
                         }
                         break;
                     }
+                    min_distance = min_distance.min(dist as i32);
                 }
+                projectile.min_dist = min_distance;
             }
         }
     }

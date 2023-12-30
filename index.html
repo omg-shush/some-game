@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <title>Some game</title>
+    </head>
+    <style>
+        html {
+            width: 100%;
+            min-width: 100%;
+            max-width: 100%;
+            height: 100%;
+            min-height: 100%;
+            max-height: 100%;
+            overflow: hidden;
+        }
+        body {
+            margin: 0px;
+            width: 100%;
+            min-width: 100%;
+            max-width: 100%;
+            height: 100%;
+            min-height: 100%;
+            max-height: 100%;
+            overflow: hidden;
+        }
+        canvas {
+            background-color: black;
+        }
+    </style>
+    <body>
+        <script type="module">
+            import initSync from './build/some-game.js';
+            initSync();
+        </script>
+        <canvas id="canvas"></canvas>
+    </body>
+</html>

@@ -2,7 +2,7 @@ use std::{io::Cursor, collections::HashMap};
 
 use bevy::{prelude::*, sprite::Anchor, ptr::Ptr, text::Text2dBounds};
 use bevy_replicon::{replicon_core::{replication_rules::{AppReplicationExt, self, Replication}, replicon_tick::RepliconTick}, bincode, network_event::{client_event::{ClientEventAppExt, FromClient}, EventType}};
-use renet::{RenetClient, ClientId};
+use renet::{RenetClient, ClientId, ServerEvent};
 use serde::{Serialize, Deserialize};
 
 use crate::{Params, player_controller::PlayerController, wasm_peers_rtc::util::console_warn, position::Position};
@@ -19,7 +19,7 @@ impl Plugin for PlayerPlugin {
         app.add_client_event::<PlayerJoinEvent>(EventType::Ordered);
         app.add_client_event::<PlayerMoveEvent>(EventType::Ordered);
         if self.is_server {
-            app.add_systems(Update, (player_joined, player_moved));
+            app.add_systems(Update, (player_joined, player_moved, handle_events_system));
             app.init_resource::<ClientPlayers>();
         } else {
             app.add_systems(Update, (join_server, added_players, update));
@@ -58,6 +58,27 @@ fn player_joined(mut commands: Commands, mut reader: EventReader<FromClient<Play
     }
 }
 
+fn handle_events_system(mut commands: Commands, mut mapping: ResMut<ClientPlayers>, mut server_events: EventReader<ServerEvent>) {
+    for event in server_events.read() {
+        match event {
+            ServerEvent::ClientConnected { client_id } => {
+                println!("Client {client_id} connected");
+            }
+            ServerEvent::ClientDisconnected { client_id, reason } => {
+                println!("Client {client_id} disconnected: {reason}");
+                let player = mapping.client_to_player.get(client_id).map(|e| *e);
+                if let Some(player) = player {
+                    if let Some(entity) = commands.get_entity(player) {
+                        entity.despawn_recursive();
+                    }
+                    mapping.player_to_client.remove(&player);
+                }
+                mapping.client_to_player.remove(client_id);
+            }
+        }
+    }
+}
+
 #[derive(Component, Default, Serialize, Deserialize, Reflect)]
 pub struct Score {
     pub score: usize
@@ -79,13 +100,13 @@ fn added_players(mut commands: Commands, query: Query<(Entity, &Player), Added<P
             ));
             entity.with_children(|parent| {
                 parent.spawn(Text2dBundle {
-                    text: Text::from_section(player.username.to_owned(), TextStyle { font: asset_server.load("OpenSans-Regular.ttf"), font_size: 32., color: Color::BLACK }),
+                    text: Text::from_section(player.username.to_owned(), TextStyle { font: asset_server.load("OpenSans-Regular.ttf"), font_size: 32., color: Color::WHITE }),
                     text_anchor: Anchor::BottomCenter,
                     text_2d_bounds: Text2dBounds::UNBOUNDED,
                     ..default()
                 });
                 parent.spawn((ScoreText {}, Text2dBundle {
-                    text: Text::from_section("0".to_owned(), TextStyle { font: asset_server.load("OpenSans-Regular.ttf"), font_size: 24., color: Color::BLACK }),
+                    text: Text::from_section("0".to_owned(), TextStyle { font: asset_server.load("OpenSans-Regular.ttf"), font_size: 24., color: Color::WHITE }),
                     text_anchor: Anchor::TopCenter,
                     text_2d_bounds: Text2dBounds::UNBOUNDED,
                     ..default()

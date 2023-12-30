@@ -1,6 +1,6 @@
 use std::{rc::Rc, cell::RefCell, collections::HashMap};
 
-use bevy::prelude::*;
+use bevy::{prelude::*, utils::HashSet};
 use bevy_replicon::prelude::*;
 use js_sys::Promise;
 use renet::{RenetServer, ConnectionConfig, RenetClient, ClientId};
@@ -76,7 +76,13 @@ impl WasmPeersRtcServerPlugin {
                 renet_server.add_connection(client_id);
             }
 
-            // TODO handle transport-disconnected clients
+            // Handle transport-disconnected clients
+            let mut disconnect = HashSet::new();
+            for (connection, channel) in rtc_server.clients.borrow_mut().iter() {
+                if channel.is_closed() {
+                    disconnect.insert(connection.to_owned());
+                }
+            }
 
             // Handle incoming packets
             for (connection, channel) in rtc_server.clients.borrow_mut().iter_mut() {
@@ -91,10 +97,27 @@ impl WasmPeersRtcServerPlugin {
             for client_id in renet_server.clients_id() {
                 let connection_id = client_to_connection.get(&client_id).unwrap();
                 let packets = renet_server.get_packets_to_send(client_id).unwrap();
-                let mut connection = rtc_server.clients.borrow_mut().get_mut(connection_id).unwrap().clone();
-                for packet in packets {
-                    connection.send(packet).unwrap();
+                if let Some(connection) = rtc_server.clients.borrow_mut().get_mut(connection_id) {
+                    if !connection.is_closed() {
+                        for packet in packets {
+                            if let Err(_) = connection.send(packet) {
+                                disconnect.insert(connection_id.to_owned());
+                                break;
+                            }
+                        }
+                    }
                 }
+            }
+
+            if disconnect.len() > 0 {
+                console_log!("Closing {:?}", disconnect);
+            }
+            for connection in disconnect {
+                rtc_server.clients.borrow_mut().remove(&connection);
+                let client = *connection_to_client.get(&connection).unwrap();
+                renet_server.remove_connection(client);
+                connection_to_client.remove(&connection);
+                client_to_connection.remove(&client);
             }
         }
     }

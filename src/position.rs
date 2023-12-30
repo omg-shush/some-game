@@ -9,7 +9,7 @@ pub struct PositionPlugin {
 impl Plugin for PositionPlugin {
     fn build(&self, app: &mut App) {
         if !self.is_server {
-            app.add_systems(Update, (Self::added, Self::update).after(ClientSet::Receive).before(ServerSet::Send));
+            app.add_systems(Update, (Self::added, Self::update));
         }
         app.replicate::<Position>();
     }

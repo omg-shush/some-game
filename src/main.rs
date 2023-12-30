@@ -4,7 +4,7 @@ use player::Player;
 use position::Position;
 use serde::{Deserialize, Serialize};
 use wasm_bindgen::prelude::*;
-use bevy::{prelude::*, log::{LogPlugin, Level}};
+use bevy::{prelude::*, log::{LogPlugin, Level}, window::CursorGrabMode};
 use bevy_inspector_egui::quick::WorldInspectorPlugin;
 use enemy::EnemySpawner;
 use player_controller::{Cursor, CursorSprite, PlayerController};
@@ -33,9 +33,13 @@ extern "C" {
 
 #[derive(Serialize, Deserialize, Default, Debug, Resource, Parser)]
 struct Params {
+    #[clap(default_value_t = false)]
+    #[serde(default = "default_is_server")]
     is_server: bool,
     username: String
 }
+
+fn default_is_server() -> bool { false }
 
 fn main() {
     println!("Hello, world!");
@@ -63,7 +67,17 @@ fn main() {
         app.add_plugins(MinimalPlugins);
         app.add_plugins(ReplicationPlugins.build().disable::<ClientPlugin>());
     } else {
-        app.add_plugins(DefaultPlugins.set(LogPlugin {filter: "wgpu_hal=off".to_string(), level: Level::WARN}));
+        app.add_plugins(DefaultPlugins
+            .set(LogPlugin {filter: "wgpu_hal=off".to_string(), level: Level::WARN})
+            .set(WindowPlugin {
+                primary_window: Some(Window {
+                    cursor: bevy::window::Cursor { visible: false, grab_mode: CursorGrabMode::None, ..default() },
+                    canvas: Some("#canvas".to_string()),
+                    fit_canvas_to_parent: true,
+                    ..default()
+                }),
+                ..default()
+            }));
         app.add_plugins(ReplicationPlugins.build().disable::<ServerPlugin>());
         // app.add_plugins(WorldInspectorPlugin::new());
         app.add_plugins(PlayerControllerPlugin {});
@@ -114,7 +128,7 @@ fn setup_server(mut commands: Commands) {
             image: "enemy.png".to_owned(),
             timer: Timer::from_seconds(5., TimerMode::Repeating),
         },
-        Position::from_translation(Vec3::new(-300., 400., 0.5)),
+        Position::from_translation(Vec3::new(-600., -100., 0.5)),
     ));
 }
 
@@ -134,7 +148,7 @@ impl MapNetworkEntities for PlayerShootEvent {
 }
 
 fn player_shoot(
-    mut player: Query<(Entity, &mut PlayerController, &mut Transform), Without<CursorSprite>>,
+    mut player: Query<(Entity, &mut PlayerController, &mut Position), Without<CursorSprite>>,
     cursor: Res<Cursor>,
     buttons: Res<Input<MouseButton>>,
     mut writer: EventWriter<PlayerShootEvent>
@@ -152,6 +166,7 @@ fn player_shoot(
                 velocity: direction * 150.,
                 hits: ProjectileHits::Enemy,
                 initial_position: position,
+                min_dist: -1,
             }});
         }
     }
