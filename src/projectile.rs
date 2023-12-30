@@ -1,6 +1,8 @@
 use bevy::{prelude::*, sprite::Anchor};
+use bevy_replicon::{network_event::{EventType, client_event::{ClientEventAppExt, FromClient}}, replicon_core::replication_rules::{Replication, AppReplicationExt}};
+use serde::{Deserialize, Serialize};
 
-use crate::{enemy::Enemy, player::Player};
+use crate::{enemy::Enemy, player::Player, PlayerShootEvent, position::Position};
 
 pub struct ProjectilePlugin {
     pub is_server: bool
@@ -8,24 +10,37 @@ pub struct ProjectilePlugin {
 
 impl Plugin for ProjectilePlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Update, (step, collide));
-        if !self.is_server {
+        app.add_client_event::<PlayerShootEvent>(EventType::Ordered);
+        app.replicate::<Projectile>();
+        if self.is_server {
+            app.add_systems(Update, (player_shoot, step, collide));
+        } else {
             app.add_systems(Update, added_projectile);
         }
     }
 }
 
+#[derive(Serialize, Deserialize, Clone, Reflect, Default)]
 pub enum ProjectileHits {
+    #[default]
     Friendly,
     Enemy,
 }
 
-#[derive(Component)]
+#[derive(Component, Serialize, Deserialize, Clone, Reflect, Default)]
+#[reflect(Component)]
 pub struct Projectile {
-    pub src: Entity,
+    // pub src: Entity,
     pub velocity: Vec3,
     pub hits: ProjectileHits,
     pub initial_position: Vec3,
+}
+
+fn player_shoot(mut commands: Commands, mut reader: EventReader<FromClient<PlayerShootEvent>>) {
+    for evt in reader.read() {
+        let projectile = evt.event.projectile.clone();
+        commands.spawn((projectile, Position::from_translation(evt.event.projectile.initial_position.clone()), Replication));
+    }
 }
 
 fn added_projectile(
@@ -34,19 +49,18 @@ fn added_projectile(
     asset_server: Res<AssetServer>,
 ) {
     for (entity, projectile) in added.iter() {
-        commands.get_entity(entity).unwrap().insert(SpriteBundle {
-            transform: Transform::from_translation(projectile.initial_position),
-            texture: asset_server.load("spark.png"),
-            sprite: Sprite {
+        commands.get_entity(entity).unwrap().insert((
+            asset_server.load::<Image>("spark.png"),
+            Sprite {
                 anchor: Anchor::Center,
                 ..default()
             },
-            ..default()
-        });
+            VisibilityBundle::default()
+        ));
     }
 }
 
-fn step(mut commands: Commands, mut projectiles: Query<(Entity, &Projectile, &mut Transform)>, time: Res<Time>) {
+fn step(mut commands: Commands, mut projectiles: Query<(Entity, &Projectile, &mut Position)>, time: Res<Time>) {
     for (entity, projectile, mut transform) in projectiles.iter_mut() {
         transform.translation += projectile.velocity * time.delta_seconds();
         if (transform.translation - projectile.initial_position).length() > 300. {
@@ -57,17 +71,17 @@ fn step(mut commands: Commands, mut projectiles: Query<(Entity, &Projectile, &mu
 
 fn collide(
     mut commands: Commands,
-    projectiles: Query<(Entity, &Projectile, &Transform)>,
-    players: Query<(Entity, &Player, &Transform)>,
-    enemies: Query<(Entity, &Enemy, &Transform)>,
+    projectiles: Query<(Entity, &Projectile, &Position)>,
+    players: Query<(Entity, &Player, &Position)>,
+    enemies: Query<(Entity, &Enemy, &Position)>,
 ) {
-    for (projectile_entity, projectile, projectile_transform) in projectiles.iter() {
+    for (projectile_entity, projectile, projectile_position) in projectiles.iter() {
         match projectile.hits {
             ProjectileHits::Friendly => {
-                for (player_entity, player, player_transform) in players.iter() {
-                    if projectile_transform
+                for (player_entity, player, player_position) in players.iter() {
+                    if projectile_position
                         .translation
-                        .distance(player_transform.translation)
+                        .distance(player_position.translation)
                         < 10.
                     {
                         // Hit player
@@ -79,7 +93,7 @@ fn collide(
             }
             ProjectileHits::Enemy => {
                 for (enemy_entity, enemy, enemy_transform) in enemies.iter() {
-                    if projectile_transform.translation.distance(enemy_transform.translation) < 30. {
+                    if projectile_position.translation.distance(enemy_transform.translation) < 30. {
                         // Hit enemy
                         commands.entity(enemy_entity).despawn_recursive();
                         commands.entity(projectile_entity).despawn_recursive();

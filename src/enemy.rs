@@ -2,7 +2,7 @@ use bevy::{prelude::*, sprite::Anchor};
 use bevy_replicon::replicon_core::replication_rules::{AppReplicationExt, Replication};
 use serde::{Serialize, Deserialize};
 
-use crate::player::Player;
+use crate::{player::Player, position::Position};
 
 pub struct EnemyPlugin {
     pub is_server: bool
@@ -10,9 +10,11 @@ pub struct EnemyPlugin {
 
 impl Plugin for EnemyPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Update, (update_spawners, update_enemies));
-        if !self.is_server {
-            app.add_systems(Update, (added_enemies));
+        app.add_systems(Update, update_enemies);
+        if self.is_server {
+            app.add_systems(Update, update_spawners);
+        } else {
+            app.add_systems(Update, added_enemies);
         }
         app.replicate::<Enemy>();
     }
@@ -30,16 +32,13 @@ pub struct Enemy {
     image: String
 }
 
-fn update_spawners(mut commands: Commands, mut spawners: Query<(&mut EnemySpawner, &Transform)>, time: Res<Time>) {
-    for (mut spawner, transform) in spawners.iter_mut() {
+fn update_spawners(mut commands: Commands, mut spawners: Query<(&mut EnemySpawner, &Position)>, time: Res<Time>) {
+    for (mut spawner, position) in spawners.iter_mut() {
         spawner.timer.tick(time.delta());
         if spawner.timer.just_finished() {
             commands.spawn((
                 Enemy {image: spawner.image.to_owned()},
-                SpriteBundle {
-                    transform: transform.clone(),
-                    ..default()
-                },
+                position.clone(),
                 Replication
             ));
         }
@@ -53,7 +52,6 @@ fn added_enemies(mut commands: Commands, asset_server: Res<AssetServer>, mut new
             entity.insert((
                 new_image,
                 VisibilityBundle::default(),
-                GlobalTransform::default(),
                 Sprite {
                     anchor: Anchor::Center,
                     ..default()
@@ -63,24 +61,24 @@ fn added_enemies(mut commands: Commands, asset_server: Res<AssetServer>, mut new
     }
 }
 
-fn update_enemies(mut commands: Commands, mut enemies: Query<(&mut Enemy, &mut Transform)>, players: Query<(Entity, &Transform), (With<Player>, Without<Enemy>)>, time: Res<Time>) {
-    for (mut enemy, mut enemy_transform) in enemies.iter_mut() {
+fn update_enemies(mut commands: Commands, mut enemies: Query<(&mut Enemy, &mut Position)>, players: Query<(Entity, &Position), (With<Player>, Without<Enemy>)>, time: Res<Time>) {
+    for (enemy, mut enemy_position) in enemies.iter_mut() {
         // Target nearest player
         let mut nearest = None;
-        for (player, player_transform) in players.iter() {
-            let dist_squared = player_transform.translation.distance_squared(enemy_transform.translation);
+        for (player, player_position) in players.iter() {
+            let dist_squared = player_position.translation.distance_squared(enemy_position.translation);
             nearest = match nearest {
-                None => Some((player, player_transform, dist_squared)),
-                Some((_, _, other_dist_squared)) if dist_squared > other_dist_squared => Some((player, player_transform, dist_squared)),
+                None => Some((player, player_position, dist_squared)),
+                Some((_, _, other_dist_squared)) if dist_squared > other_dist_squared => Some((player, player_position, dist_squared)),
                 Some(_) => nearest
             };
         }
         
         // Attack player
-        if let Some((player, player_transform, _)) = nearest {
-            let direction = (player_transform.translation - enemy_transform.translation).normalize();
+        if let Some((player, player_position, _)) = nearest {
+            let direction = (player_position.translation - enemy_position.translation).normalize();
             let delta = direction * time.delta_seconds() * 50.;
-            enemy_transform.translation += delta;
+            enemy_position.translation += delta;
         }
     }
 }

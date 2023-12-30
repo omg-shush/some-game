@@ -16,7 +16,7 @@ mod callback_channel;
 mod deque_channel;
 mod webrtc;
 mod signaling;
-mod util;
+pub mod util;
 
 pub struct WasmPeersRtcPlugin {
     pub is_server: bool
@@ -38,7 +38,6 @@ impl Plugin for WasmPeersRtcServerPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(Startup, Self::setup);
         app.add_systems(Update, Self::update);
-        app.add_plugins(ReplicationPlugins.build().disable::<ClientPlugin>());
         let network_channels = app.world.resource::<NetworkChannels>();
         let connection_config = ConnectionConfig {
             server_channels_config: network_channels.get_server_configs(),
@@ -107,15 +106,14 @@ impl Plugin for WasmPeersRtcClientPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(Startup, Self::setup);
         app.add_systems(Update, Self::update);
-        app.add_plugins(ReplicationPlugins.build().disable::<ServerPlugin>());
         let network_channels = app.world.resource::<NetworkChannels>();
         let connection_config = ConnectionConfig {
             server_channels_config: network_channels.get_server_configs(),
             client_channels_config: network_channels.get_client_configs(),
             ..Default::default()
         };
-        let server = RenetClient::new(connection_config);
-        app.insert_resource(server);
+        let client = RenetClient::new(connection_config);
+        app.insert_resource(client);
     }
 }
 

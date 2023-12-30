@@ -1,5 +1,7 @@
 use bevy::{prelude::*, window::CursorGrabMode};
 
+use crate::player::PlayerMoveEvent;
+
 pub struct PlayerControllerPlugin {}
 
 impl Plugin for PlayerControllerPlugin {
@@ -25,26 +27,30 @@ pub struct Cursor {
 impl Resource for Cursor {}
 
 fn update_keys(
-    mut player: Query<(&mut PlayerController, &mut Transform)>,
+    mut player: Query<&mut PlayerController>,
     time: Res<Time>,
     keys: Res<Input<KeyCode>>,
+    mut writer: EventWriter<PlayerMoveEvent>
 ) {
-    let (controller, mut transform) = player.single_mut();
-    let mut delta = Vec3::ZERO;
-    if keys.pressed(KeyCode::W) {
-        delta += Vec3::Y;
+    if let Ok(controller) = player.get_single_mut() {
+        let mut delta = Vec3::ZERO;
+        if keys.pressed(KeyCode::W) {
+            delta += Vec3::Y;
+        }
+        if keys.pressed(KeyCode::S) {
+            delta -= Vec3::Y;
+        }
+        if keys.pressed(KeyCode::D) {
+            delta += Vec3::X;
+        }
+        if keys.pressed(KeyCode::A) {
+            delta -= Vec3::X;
+        }
+        delta = delta.normalize_or_zero() * time.delta_seconds() * controller.speed;
+        if delta.length() > 0. {
+            writer.send(PlayerMoveEvent {delta});
+        }
     }
-    if keys.pressed(KeyCode::S) {
-        delta -= Vec3::Y;
-    }
-    if keys.pressed(KeyCode::D) {
-        delta += Vec3::X;
-    }
-    if keys.pressed(KeyCode::A) {
-        delta -= Vec3::X;
-    }
-    delta = delta.normalize_or_zero() * time.delta_seconds() * controller.speed;
-    transform.translation += delta;
 }
 
 fn setup(mut commands: Commands, asset_server: Res<AssetServer>, mut window: Query<&mut Window>) {

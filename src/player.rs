@@ -1,12 +1,12 @@
-use std::{io::Cursor, time::Duration};
+use std::{io::Cursor, collections::HashMap};
 
-use bevy::{prelude::*, sprite::Anchor, ptr::Ptr};
-use bevy_replicon::{replicon_core::{replication_rules::{AppReplicationExt, self, Replication}, replicon_tick::RepliconTick}, bincode, network_event::client_event::{ClientEventAppExt, FromClient}};
-use bevy_replicon::client::client_mapper::ServerEntityMap;
-use renet::{SendType, RenetClient};
+use bevy::{prelude::*, sprite::Anchor, ptr::Ptr, text::Text2dBounds};
+use bevy_replicon::{replicon_core::{replication_rules::{AppReplicationExt, self, Replication}, replicon_tick::RepliconTick}, bincode, network_event::{client_event::{ClientEventAppExt, FromClient}, EventType}};
+use renet::{RenetClient, ClientId};
 use serde::{Serialize, Deserialize};
 
-use crate::player_controller::PlayerController;
+use crate::{Params, player_controller::PlayerController, wasm_peers_rtc::util::console_warn, position::Position};
+use crate::wasm_peers_rtc::util::js_warn;
 
 pub struct PlayerPlugin {
     pub is_server: bool
@@ -15,37 +15,15 @@ pub struct PlayerPlugin {
 impl Plugin for PlayerPlugin {
     fn build(&self, app: &mut App) {
         app.replicate::<Player>();
-        app.replicate_with::<Transform>(serialize_transform, deserialize_transform, replication_rules::remove_component::<Transform>);
-        app.add_client_event::<PlayerJoinEvent>(SendType::ReliableOrdered { resend_time: Duration::from_secs(1) });
+        app.add_client_event::<PlayerJoinEvent>(EventType::Ordered);
+        app.add_client_event::<PlayerMoveEvent>(EventType::Ordered);
         if self.is_server {
-            app.add_systems(Update, player_joined);
+            app.add_systems(Update, (player_joined, player_moved));
+            app.init_resource::<ClientPlayers>();
         } else {
             app.add_systems(Update, (join_server, added_players));
         }
     }
-}
-
-/// Serializes only translation.
-fn serialize_transform(
-    component: Ptr,
-    cursor: &mut Cursor<Vec<u8>>,
-) -> bincode::Result<()> {
-    // SAFETY: Function called for registered `ComponentId`.
-    let transform: &Transform = unsafe { component.deref() };
-    bincode::serialize_into(cursor, &transform.translation)
-}
-
-/// Deserializes translation and creates [`Transform`] from it.
-fn deserialize_transform(
-    entity: &mut EntityWorldMut,
-    _entity_map: &mut ServerEntityMap,
-    cursor: &mut Cursor<&[u8]>,
-    _replicon_tick: RepliconTick,
-) -> bincode::Result<()> {
-    let translation: Vec3 = bincode::deserialize_from(cursor)?;
-    entity.insert(Transform::from_translation(translation));
-
-    Ok(())
 }
 
 #[derive(Component, Serialize, Deserialize)]
@@ -58,33 +36,74 @@ struct PlayerJoinEvent {
     username: String
 }
 
-fn join_server(client: Res<RenetClient>, mut connected: Local<bool>, mut writer: EventWriter<PlayerJoinEvent>) {
+fn join_server(client: Res<RenetClient>, mut connected: Local<bool>, mut writer: EventWriter<PlayerJoinEvent>, params: Res<Params>) {
     if !*connected && client.is_connected() {
         *connected = true;
-        writer.send(PlayerJoinEvent { username: "username here".to_owned() });
+        writer.send(PlayerJoinEvent { username: params.username.to_owned() });
     }
 }
 
-fn player_joined(mut commands: Commands, mut reader: EventReader<FromClient<PlayerJoinEvent>>) {
+fn player_joined(mut commands: Commands, mut reader: EventReader<FromClient<PlayerJoinEvent>>, mut mapping: ResMut<ClientPlayers>) {
     for evt in reader.read() {
-        let username = evt.event.username;
-        commands.spawn(Player {username});
+        let username = evt.event.username.to_owned();
+        let entity = commands.spawn((
+            Player {username},
+            Position::from_translation(Vec3::Z),
+            Replication
+        )).id();
+        mapping.client_to_player.insert(evt.client_id, entity);
+        mapping.player_to_client.insert(entity, evt.client_id);
     }
 }
 
-fn added_players(mut commands: Commands, query: Query<(Entity, &Player), Added<Player>>, asset_server: ResMut<AssetServer>) {
+fn added_players(mut commands: Commands, query: Query<(Entity, &Player), Added<Player>>, asset_server: ResMut<AssetServer>, params: Res<Params>) {
     for (entity, player) in query.iter() {
         if let Some(mut entity) = commands.get_entity(entity) {
             entity.insert((
-                SpriteBundle {
-                    sprite: Sprite {
+                Sprite {
                         anchor: Anchor::Center,
                         ..default()
-                    },
-                    texture: asset_server.load("chell.png"),
-                    transform: Transform::from_translation(Vec3::Z), ..default()
                 },
+                asset_server.load::<Image>("chell.png"),
+                VisibilityBundle::default()
             ));
+            entity.with_children(|parent| {
+                parent.spawn(Text2dBundle {
+                    text: Text::from_section(player.username.to_owned(), TextStyle { font: asset_server.load("OpenSans-Regular.ttf"), font_size: 16., color: Color::BLACK }),
+                    text_anchor: Anchor::BottomCenter,
+                    text_2d_bounds: Text2dBounds::UNBOUNDED,
+                    ..default()
+                });
+            });
+            // TODO make this more robust
+            if params.username == player.username {
+                entity.insert(PlayerController { speed: 100. });
+            }
         }
+    }
+}
+
+#[derive(Default, Resource)]
+struct ClientPlayers {
+    client_to_player: HashMap<ClientId, Entity>,
+    player_to_client: HashMap<Entity, ClientId>
+}
+
+#[derive(Event, Serialize, Deserialize)]
+pub struct PlayerMoveEvent {
+    pub delta: Vec3
+}
+
+fn player_moved(mut reader: EventReader<FromClient<PlayerMoveEvent>>, mapping: Res<ClientPlayers>, mut players: Query<&mut Position, With<Player>>) {
+    for evt in reader.read() {
+        fn player_move(mapping: &ClientPlayers, client: ClientId, players: &mut Query<&mut Position, With<Player>>, delta: Vec3) -> Option<()> {
+            let e = *mapping.client_to_player.get(&client)?;
+            let mut position = players.get_mut(e).ok()?;
+            position.translation += delta;
+            Some(())
+        }
+        if player_move(&mapping, evt.client_id, &mut players, evt.event.delta).is_none() {
+            console_warn!("Failed to handle PlayerMoveEvent");
+        };
     }
 }
