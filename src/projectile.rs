@@ -2,7 +2,7 @@ use bevy::{prelude::*, sprite::Anchor};
 use bevy_replicon::{network_event::{EventType, client_event::{ClientEventAppExt, FromClient}}, replicon_core::replication_rules::{Replication, AppReplicationExt}};
 use serde::{Deserialize, Serialize};
 
-use crate::{enemy::Enemy, player::Player, PlayerShootEvent, position::Position};
+use crate::{enemy::Enemy, player::{Player, Score}, PlayerShootEvent, position::Position};
 
 pub struct ProjectilePlugin {
     pub is_server: bool
@@ -10,7 +10,7 @@ pub struct ProjectilePlugin {
 
 impl Plugin for ProjectilePlugin {
     fn build(&self, app: &mut App) {
-        app.add_client_event::<PlayerShootEvent>(EventType::Ordered);
+        app.add_mapped_client_event::<PlayerShootEvent>(EventType::Ordered);
         app.replicate::<Projectile>();
         if self.is_server {
             app.add_systems(Update, (player_shoot, step, collide));
@@ -27,13 +27,24 @@ pub enum ProjectileHits {
     Enemy,
 }
 
-#[derive(Component, Serialize, Deserialize, Clone, Reflect, Default)]
+#[derive(Component, Serialize, Deserialize, Clone, Reflect)]
 #[reflect(Component)]
 pub struct Projectile {
-    // pub src: Entity,
+    pub src: Entity,
     pub velocity: Vec3,
     pub hits: ProjectileHits,
     pub initial_position: Vec3,
+}
+
+impl Default for Projectile {
+    fn default() -> Self {
+        Self {
+            src: Entity::PLACEHOLDER,
+            velocity: Default::default(),
+            hits: Default::default(),
+            initial_position: Default::default()
+        }
+    }
 }
 
 fn player_shoot(mut commands: Commands, mut reader: EventReader<FromClient<PlayerShootEvent>>) {
@@ -72,13 +83,13 @@ fn step(mut commands: Commands, mut projectiles: Query<(Entity, &Projectile, &mu
 fn collide(
     mut commands: Commands,
     projectiles: Query<(Entity, &Projectile, &Position)>,
-    players: Query<(Entity, &Player, &Position)>,
-    enemies: Query<(Entity, &Enemy, &Position)>,
+    mut players: Query<(Entity, &Player, &Position, &mut Score)>,
+    enemies: Query<(Entity, &Enemy, &Position)>
 ) {
     for (projectile_entity, projectile, projectile_position) in projectiles.iter() {
         match projectile.hits {
             ProjectileHits::Friendly => {
-                for (player_entity, player, player_position) in players.iter() {
+                for (player_entity, player, player_position, player_score) in players.iter() {
                     if projectile_position
                         .translation
                         .distance(player_position.translation)
@@ -97,6 +108,10 @@ fn collide(
                         // Hit enemy
                         commands.entity(enemy_entity).despawn_recursive();
                         commands.entity(projectile_entity).despawn_recursive();
+
+                        if let Ok(mut score) = players.get_component_mut::<Score>(projectile.src) {
+                            score.score += 1;
+                        }
                         break;
                     }
                 }

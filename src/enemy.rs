@@ -69,7 +69,7 @@ fn update_enemies(mut commands: Commands, mut enemies: Query<(&mut Enemy, &mut P
             let dist_squared = player_position.translation.distance_squared(enemy_position.translation);
             nearest = match nearest {
                 None => Some((player, player_position, dist_squared)),
-                Some((_, _, other_dist_squared)) if dist_squared > other_dist_squared => Some((player, player_position, dist_squared)),
+                Some((_, _, other_dist_squared)) if dist_squared < other_dist_squared => Some((player, player_position, dist_squared)),
                 Some(_) => nearest
             };
         }

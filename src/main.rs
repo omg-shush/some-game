@@ -1,5 +1,5 @@
 use std::env;
-use bevy_replicon::{ReplicationPlugins, client::ClientPlugin, server::{ServerPlugin, ServerSet}};
+use bevy_replicon::{ReplicationPlugins, client::ClientPlugin, server::{ServerPlugin, ServerSet}, replicon_core::replication_rules::MapNetworkEntities};
 use player::Player;
 use position::Position;
 use serde::{Deserialize, Serialize};
@@ -65,7 +65,7 @@ fn main() {
     } else {
         app.add_plugins(DefaultPlugins.set(LogPlugin {filter: "wgpu_hal=off".to_string(), level: Level::WARN}));
         app.add_plugins(ReplicationPlugins.build().disable::<ServerPlugin>());
-        app.add_plugins(WorldInspectorPlugin::new());
+        // app.add_plugins(WorldInspectorPlugin::new());
         app.add_plugins(PlayerControllerPlugin {});
     }
     app.add_plugins((
@@ -127,6 +127,12 @@ struct PlayerShootEvent {
     projectile: Projectile
 }
 
+impl MapNetworkEntities for PlayerShootEvent {
+    fn map_entities<T: bevy_replicon::prelude::Mapper>(&mut self, mapper: &mut T) {
+        self.projectile.src = mapper.map(self.projectile.src);
+    }
+}
+
 fn player_shoot(
     mut player: Query<(Entity, &mut PlayerController, &mut Transform), Without<CursorSprite>>,
     cursor: Res<Cursor>,
@@ -142,7 +148,7 @@ fn player_shoot(
             let destination = Vec3::new(cursor.pos.x, cursor.pos.y, position.z);
             let direction = (destination - position).normalize_or_zero();
             writer.send(PlayerShootEvent { projectile: Projectile {
-                // src: player.single().0,
+                src: player.0,
                 velocity: direction * 150.,
                 hits: ProjectileHits::Enemy,
                 initial_position: position,

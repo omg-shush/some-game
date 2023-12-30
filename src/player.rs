@@ -15,13 +15,14 @@ pub struct PlayerPlugin {
 impl Plugin for PlayerPlugin {
     fn build(&self, app: &mut App) {
         app.replicate::<Player>();
+        app.replicate::<Score>();
         app.add_client_event::<PlayerJoinEvent>(EventType::Ordered);
         app.add_client_event::<PlayerMoveEvent>(EventType::Ordered);
         if self.is_server {
             app.add_systems(Update, (player_joined, player_moved));
             app.init_resource::<ClientPlayers>();
         } else {
-            app.add_systems(Update, (join_server, added_players));
+            app.add_systems(Update, (join_server, added_players, update));
         }
     }
 }
@@ -48,6 +49,7 @@ fn player_joined(mut commands: Commands, mut reader: EventReader<FromClient<Play
         let username = evt.event.username.to_owned();
         let entity = commands.spawn((
             Player {username},
+            Score::default(),
             Position::from_translation(Vec3::Z),
             Replication
         )).id();
@@ -55,6 +57,14 @@ fn player_joined(mut commands: Commands, mut reader: EventReader<FromClient<Play
         mapping.player_to_client.insert(entity, evt.client_id);
     }
 }
+
+#[derive(Component, Default, Serialize, Deserialize, Reflect)]
+pub struct Score {
+    pub score: usize
+}
+
+#[derive(Component)]
+struct ScoreText {}
 
 fn added_players(mut commands: Commands, query: Query<(Entity, &Player), Added<Player>>, asset_server: ResMut<AssetServer>, params: Res<Params>) {
     for (entity, player) in query.iter() {
@@ -69,16 +79,30 @@ fn added_players(mut commands: Commands, query: Query<(Entity, &Player), Added<P
             ));
             entity.with_children(|parent| {
                 parent.spawn(Text2dBundle {
-                    text: Text::from_section(player.username.to_owned(), TextStyle { font: asset_server.load("OpenSans-Regular.ttf"), font_size: 16., color: Color::BLACK }),
+                    text: Text::from_section(player.username.to_owned(), TextStyle { font: asset_server.load("OpenSans-Regular.ttf"), font_size: 32., color: Color::BLACK }),
                     text_anchor: Anchor::BottomCenter,
                     text_2d_bounds: Text2dBounds::UNBOUNDED,
                     ..default()
                 });
+                parent.spawn((ScoreText {}, Text2dBundle {
+                    text: Text::from_section("0".to_owned(), TextStyle { font: asset_server.load("OpenSans-Regular.ttf"), font_size: 24., color: Color::BLACK }),
+                    text_anchor: Anchor::TopCenter,
+                    text_2d_bounds: Text2dBounds::UNBOUNDED,
+                    ..default()
+                }));
             });
             // TODO make this more robust
             if params.username == player.username {
                 entity.insert(PlayerController { speed: 100. });
             }
+        }
+    }
+}
+
+fn update(scores: Query<&Score>, mut texts: Query<(&Parent, &mut Text), (With<Parent>, With<ScoreText>)>) {
+    for (parent, mut text) in texts.iter_mut() {
+        if let Ok(score) = scores.get_component::<Score>(**parent) {
+            text.sections[0].value = format!("{}", score.score);
         }
     }
 }
