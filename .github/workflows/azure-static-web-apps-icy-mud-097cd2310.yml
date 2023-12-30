@@ -19,6 +19,12 @@ jobs:
         with:
           submodules: true
           lfs: false
+      - name: Copy to Build Directory
+        run: |
+          mkdir app
+          cp assets/ app/ -r
+          cp build/ app/ -r
+          cp index.html app/
       - name: Build And Deploy
         id: builddeploy
         uses: Azure/static-web-apps-deploy@v1
