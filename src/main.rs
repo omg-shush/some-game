@@ -61,6 +61,11 @@ fn main() {
         params
     };
 
+    #[cfg(debug_assertions)]
+    let canvas = None;
+    #[cfg(not(debug_assertions))]
+    let canvas = Some("#canvas".to_string());
+
     let is_server = params.is_server;
     let mut app = App::new();
     if is_server {
@@ -72,14 +77,15 @@ fn main() {
             .set(WindowPlugin {
                 primary_window: Some(Window {
                     cursor: bevy::window::Cursor { visible: false, grab_mode: CursorGrabMode::None, ..default() },
-                    canvas: Some("#canvas".to_string()),
+                    canvas,
                     fit_canvas_to_parent: true,
                     ..default()
                 }),
                 ..default()
             }));
         app.add_plugins(ReplicationPlugins.build().disable::<ServerPlugin>());
-        // app.add_plugins(WorldInspectorPlugin::new());
+        #[cfg(debug_assertions)]
+        app.add_plugins(WorldInspectorPlugin::new());
         app.add_plugins(PlayerControllerPlugin {});
     }
     app.add_plugins((
