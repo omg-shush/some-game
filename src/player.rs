@@ -1,7 +1,7 @@
 use std::{io::Cursor, collections::HashMap};
 
 use bevy::{prelude::*, sprite::Anchor, ptr::Ptr, text::Text2dBounds};
-use bevy_replicon::{replicon_core::{replication_rules::{AppReplicationExt, self, Replication}, replicon_tick::RepliconTick}, bincode, network_event::{client_event::{ClientEventAppExt, FromClient}, EventType}};
+use bevy_replicon::{replicon_core::{replication_rules::{AppReplicationExt, self, Replication}, replicon_tick::RepliconTick}, bincode, network_event::{client_event::{ClientEventAppExt, FromClient}, EventType, server_event::{ServerEventAppExt, ToClients, SendMode}}};
 use renet::{RenetClient, ClientId, ServerEvent};
 use serde::{Serialize, Deserialize};
 
@@ -17,24 +17,32 @@ impl Plugin for PlayerPlugin {
         app.replicate::<Player>();
         app.replicate::<Score>();
         app.add_client_event::<PlayerJoinEvent>(EventType::Ordered);
+        app.add_server_event::<PlayerSpawnEvent>(EventType::Ordered);
         app.add_client_event::<PlayerMoveEvent>(EventType::Ordered);
         if self.is_server {
             app.add_systems(Update, (player_joined, player_moved, handle_events_system));
             app.init_resource::<ClientPlayers>();
         } else {
-            app.add_systems(Update, (join_server, added_players, update));
+            app.add_systems(Update, (join_server, added_players, update, player_spawned, my_player));
+            app.init_resource::<ResClientId>();
         }
     }
 }
 
 #[derive(Component, Serialize, Deserialize)]
 pub struct Player {
+    client_id: u32,
     username: String
 }
 
 #[derive(Event, Serialize, Deserialize)]
 struct PlayerJoinEvent {
     username: String
+}
+
+#[derive(Event, Serialize, Deserialize)]
+struct PlayerSpawnEvent {
+    client_id: u32
 }
 
 fn join_server(client: Res<RenetClient>, mut connected: Local<bool>, mut writer: EventWriter<PlayerJoinEvent>, params: Res<Params>) {
@@ -44,17 +52,44 @@ fn join_server(client: Res<RenetClient>, mut connected: Local<bool>, mut writer:
     }
 }
 
-fn player_joined(mut commands: Commands, mut reader: EventReader<FromClient<PlayerJoinEvent>>, mut mapping: ResMut<ClientPlayers>) {
+fn player_joined(mut commands: Commands, mut reader: EventReader<FromClient<PlayerJoinEvent>>, mut writer: EventWriter<ToClients<PlayerSpawnEvent>>, mut mapping: ResMut<ClientPlayers>) {
     for evt in reader.read() {
         let username = evt.event.username.to_owned();
+        let client_id = evt.client_id.raw() as u32;
         let entity = commands.spawn((
-            Player {username},
+            Player {client_id, username},
             Score::default(),
             Position::from_translation(Vec3::Z),
             Replication
         )).id();
         mapping.client_to_player.insert(evt.client_id, entity);
         mapping.player_to_client.insert(entity, evt.client_id);
+        writer.send(ToClients { mode: SendMode::Direct(evt.client_id), event: PlayerSpawnEvent { client_id } });
+    }
+}
+
+#[derive(Resource)]
+struct ResClientId {
+    client_id: ClientId
+}
+
+impl Default for ResClientId {
+    fn default() -> Self {
+        Self { client_id: ClientId::from_raw(1000000) }
+    }
+}
+
+fn player_spawned(mut reader: EventReader<PlayerSpawnEvent>, mut client_id: ResMut<ResClientId>) {
+    for evt in reader.read() {
+        client_id.client_id = ClientId::from_raw(evt.client_id as u64);
+    }
+}
+
+fn my_player(mut commands: Commands, players: Query<(Entity, &Player), Without<PlayerController>>, client_id: Res<ResClientId>) {
+    for (entity, player) in players.iter() {
+        if player.client_id == client_id.client_id.raw() as u32 {
+            commands.entity(entity).insert(PlayerController { speed: 100. });
+        }
     }
 }
 
@@ -112,10 +147,6 @@ fn added_players(mut commands: Commands, query: Query<(Entity, &Player), Added<P
                     ..default()
                 }));
             });
-            // TODO make this more robust
-            if params.username == player.username {
-                entity.insert(PlayerController { speed: 100. });
-            }
         }
     }
 }
