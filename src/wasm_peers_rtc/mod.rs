@@ -7,36 +7,41 @@ use renet::{RenetServer, ConnectionConfig, RenetClient, ClientId};
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::{spawn_local, JsFuture};
 
-use webrtc::{WebRtcBrowser, WebRtcServer};
+use webrtc::{AsyncWebRtcBrowser, WebRtcServer};
 use util::*;
 
-use self::{webrtc::WebRtcClient, signaling::ConnectionId};
+use self::{webrtc::AsyncWebRtcClient, signaling::ConnectionId};
 
 mod callback_channel;
 mod deque_channel;
 mod webrtc;
 mod signaling;
 pub mod util;
+pub mod client;
 
 pub struct WasmPeersRtcPlugin {
-    pub is_server: bool
+    pub is_server: bool,
+    pub game_name: String,
+    pub server_name: String,
 }
 
 impl Plugin for WasmPeersRtcPlugin {
     fn build(&self, app: &mut App) {
         if self.is_server {
-            app.add_plugins(WasmPeersRtcServerPlugin {});
+            app.add_plugins(WasmPeersRtcServerPlugin {game_name: self.game_name.to_owned()});
         } else { // is_client
-            app.add_plugins(WasmPeersRtcClientPlugin {});
+            // app.add_plugins(WasmPeersRtcClientPlugin {game_name: self.game_name.to_owned()});
         }
     }
 }
 
-struct WasmPeersRtcServerPlugin {}
+struct WasmPeersRtcServerPlugin {
+    game_name: String
+}
 
 impl Plugin for WasmPeersRtcServerPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Startup, Self::setup);
+        app.add_systems(Startup, Self::setup(self.game_name.to_owned()));
         app.add_systems(Update, Self::update);
         let network_channels = app.world.resource::<NetworkChannels>();
         let connection_config = ConnectionConfig {
@@ -50,15 +55,18 @@ impl Plugin for WasmPeersRtcServerPlugin {
 }
 
 impl WasmPeersRtcServerPlugin {
-    fn setup(world: &mut World) {
-        let rtc_server = Rc::new(RefCell::new(None));
-        let rtc_server_clone = rtc_server.clone();
-        spawn_local(async move {
-            server(rtc_server_clone).await.expect("Server not OK");
-        });
-        world.insert_non_send_resource(rtc_server);
-        world.insert_non_send_resource::<HashMap<ClientId, ConnectionId>>(HashMap::new());
-        world.insert_non_send_resource::<HashMap<ConnectionId, ClientId>>(HashMap::new());
+    fn setup(game_name: String) -> impl FnMut(&mut World) {
+        move |world: &mut World| {
+            let rtc_server = Rc::new(RefCell::new(None));
+            let rtc_server_clone = rtc_server.clone();
+            let game_name = game_name.clone();
+            spawn_local(async {
+                server(game_name, "my-server".to_owned(), rtc_server_clone).await.expect("Server not OK");
+            });
+            world.insert_non_send_resource(rtc_server);
+            world.insert_non_send_resource::<HashMap<ClientId, ConnectionId>>(HashMap::new());
+            world.insert_non_send_resource::<HashMap<ConnectionId, ClientId>>(HashMap::new());
+        }
     }
 
     fn update(
@@ -123,7 +131,9 @@ impl WasmPeersRtcServerPlugin {
     }
 }
 
-struct WasmPeersRtcClientPlugin {}
+struct WasmPeersRtcClientPlugin {
+    game_name: String
+}
 
 impl Plugin for WasmPeersRtcClientPlugin {
     fn build(&self, app: &mut App) {
@@ -137,21 +147,21 @@ impl Plugin for WasmPeersRtcClientPlugin {
         };
         let client = RenetClient::new(connection_config);
         app.insert_resource(client);
+        app.insert_non_send_resource::<Rc<RefCell<Option<AsyncWebRtcBrowser>>>>(Rc::new(RefCell::new(None)));
+        app.insert_non_send_resource::<Rc<RefCell<Option<AsyncWebRtcClient>>>>(Rc::new(RefCell::new(None)));
     }
 }
 
 impl WasmPeersRtcClientPlugin {
     fn setup(world: &mut World) {
-        let rtc_client = Rc::new(RefCell::new(None));
-        let rtc_client_clone = rtc_client.clone();
+        let rtc_client_clone = world.non_send_resource::<Rc<RefCell<Option<AsyncWebRtcClient>>>>().clone();
         spawn_local(async move {
             client(rtc_client_clone).await.expect("Client not OK");
         });
-        world.insert_non_send_resource(rtc_client);
     }
 
     fn update(
-        rtc_client: NonSendMut<Rc<RefCell<Option<WebRtcClient>>>>,
+        rtc_client: NonSendMut<Rc<RefCell<Option<AsyncWebRtcClient>>>>,
         mut renet_client: ResMut<RenetClient>
     ) {
         // TODO handle .set_connecting()
@@ -175,9 +185,9 @@ impl WasmPeersRtcClientPlugin {
     }
 }
 
-async fn client(result: Rc<RefCell<Option<WebRtcClient>>>) -> Result<JsValue, JsValue> {
+async fn client(result: Rc<RefCell<Option<AsyncWebRtcClient>>>) -> Result<JsValue, JsValue> {
     let (browser, server_id) = loop {
-        let browser = WebRtcBrowser::new("wss://rose-signalling.webpubsub.azure.com/client/hubs/onlineservers").await?;
+        let browser = AsyncWebRtcBrowser::new("wss://rose-signalling.webpubsub.azure.com/client/hubs/onlineservers").await?;
         let next = browser.iter().next();
         if let Some((server_id, server_entry)) = next {
             console_log!("Client: connecting to server {:?} @ {}", server_entry, server_id);
@@ -193,11 +203,9 @@ async fn client(result: Rc<RefCell<Option<WebRtcClient>>>) -> Result<JsValue, Js
     Ok(JsValue::undefined())
 }
 
-async fn server(result: Rc<RefCell<Option<WebRtcServer>>>) -> Result<JsValue, JsValue> {
-    let game = "wasm-rtc-test";
-    let name = "my-server";
-    console_log!("\t\tServer: Registering... game: {}, name: {}", game, name);
-    let server = WebRtcServer::new("wss://rose-signalling.webpubsub.azure.com/client/hubs/onlineservers", game, name).await?;
+async fn server(game_name: String, server_name: String, result: Rc<RefCell<Option<WebRtcServer>>>) -> Result<JsValue, JsValue> {
+    console_log!("\t\tServer: Registering... game: {}, name: {}", game_name, server_name);
+    let server = WebRtcServer::new("wss://rose-signalling.webpubsub.azure.com/client/hubs/onlineservers", &game_name, &server_name).await?;
     *result.borrow_mut() = Some(server);
     console_log!("\t\tServer: Registered.");
     Ok(JsValue::undefined())

@@ -5,8 +5,8 @@ use bevy_replicon::{replicon_core::{replication_rules::{AppReplicationExt, self,
 use renet::{RenetClient, ClientId, ServerEvent};
 use serde::{Serialize, Deserialize};
 
-use crate::{Params, player_controller::PlayerController, wasm_peers_rtc::util::console_warn, position::Position};
-use crate::wasm_peers_rtc::util::js_warn;
+use crate::{Params, player_controller::PlayerController, wasm_peers_rtc::{util::{console_warn, console_log}, client::WebRtcClientState}, position::Position};
+use crate::wasm_peers_rtc::util::{js_log, js_warn};
 
 pub struct PlayerPlugin {
     pub is_server: bool
@@ -23,7 +23,8 @@ impl Plugin for PlayerPlugin {
             app.add_systems(Update, (player_joined, player_moved, handle_events_system));
             app.init_resource::<ClientPlayers>();
         } else {
-            app.add_systems(Update, (join_server, added_players, update, player_spawned, my_player));
+            app.add_systems(Update, (added_players, update, player_spawned, my_player));
+            app.add_systems(Update, join_server.run_if(resource_exists::<RenetClient>()));
             app.init_resource::<ResClientId>();
         }
     }
@@ -48,6 +49,7 @@ struct PlayerSpawnEvent {
 fn join_server(client: Res<RenetClient>, mut connected: Local<bool>, mut writer: EventWriter<PlayerJoinEvent>, params: Res<Params>) {
     if !*connected && client.is_connected() {
         *connected = true;
+        console_log!("Sending PlayerJoinEvent!");
         writer.send(PlayerJoinEvent { username: params.username.to_owned() });
     }
 }

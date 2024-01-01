@@ -9,12 +9,13 @@ use bevy_inspector_egui::quick::WorldInspectorPlugin;
 use enemy::EnemySpawner;
 use player_controller::{Cursor, CursorSprite, PlayerController};
 use projectile::{Projectile, ProjectileHits};
+use wasm_peers_rtc::client::WebRtcBrowser;
 use web_sys::window;
 use clap::Parser;
 
 use crate::{
     enemy::EnemyPlugin, player::PlayerPlugin, player_controller::PlayerControllerPlugin,
-    world::WorldPlugin, projectile::ProjectilePlugin, wasm_peers_rtc::WasmPeersRtcPlugin, position::PositionPlugin,
+    world::WorldPlugin, projectile::ProjectilePlugin, wasm_peers_rtc::{WasmPeersRtcPlugin, util::{console_log, js_log}, client::{WebRtcClient, WebRtcBrowserState, WebRtcClientPlugin}}, position::PositionPlugin,
 };
 
 mod enemy;
@@ -95,13 +96,16 @@ fn main() {
         ProjectilePlugin {is_server},
         PositionPlugin {is_server},
     ));
-    app.add_plugins(WasmPeersRtcPlugin {is_server}); // After all client events registered
+    app.add_plugins(WasmPeersRtcPlugin {is_server, game_name: "some-game".to_owned(), server_name: "my-server".to_owned()}); // After all client events registered
+    app.add_plugins(WebRtcClientPlugin {is_headless: is_server});
     app.insert_resource(params);
     if is_server {
         app.add_systems(Startup, setup_server);
     } else {
         app.add_systems(Startup, setup_client);
         app.add_systems(Update, player_shoot);
+        app.add_systems(Startup, client_open_browser);
+        app.add_systems(Update, client_open_client.run_if(in_state(WebRtcBrowserState::Connected)));
     }
 
     app.run();
@@ -140,6 +144,26 @@ fn setup_server(mut commands: Commands) {
 
 fn setup_client(mut commands: Commands, asset_server: Res<AssetServer>) {
     commands.spawn(Camera2dBundle::default());
+}
+
+fn client_open_browser(world: &mut World) {
+    console_log!("Opening browser...");
+    world.insert_non_send_resource(WebRtcBrowser::new("wss://rose-signalling.webpubsub.azure.com/client/hubs/onlineservers".to_owned()));
+}
+
+fn client_open_client(world: &mut World) {
+    let mut browser = world.non_send_resource_mut::<WebRtcBrowser>();
+    let servers = browser.servers().unwrap();
+    if servers.len() > 0 {
+        let (server_connection, server_entry) = servers.into_iter().next().unwrap();
+        console_log!("Client: connecting to server {:?} @ {}", server_entry, server_connection);
+        let browser = world.remove_non_send_resource::<WebRtcBrowser>().unwrap();
+        let client = browser.connect(server_connection);
+        world.insert_non_send_resource(client);
+        return;
+    }
+    console_log!("No servers online yet...");
+    *browser = WebRtcBrowser::new("wss://rose-signalling.webpubsub.azure.com/client/hubs/onlineservers".to_owned()); // TODO proper refresh()
 }
 
 #[derive(Event, Serialize, Deserialize)]
