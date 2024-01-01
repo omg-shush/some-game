@@ -140,12 +140,14 @@ fn added_players(mut commands: Commands, query: Query<(Entity, &Player), Added<P
                     text: Text::from_section(player.username.to_owned(), TextStyle { font: asset_server.load("OpenSans-Regular.ttf"), font_size: 32., color: Color::WHITE }),
                     text_anchor: Anchor::BottomCenter,
                     text_2d_bounds: Text2dBounds::UNBOUNDED,
+                    transform: Transform::from_translation(Vec3::Z),
                     ..default()
                 });
                 parent.spawn((ScoreText {}, Text2dBundle {
                     text: Text::from_section("0".to_owned(), TextStyle { font: asset_server.load("OpenSans-Regular.ttf"), font_size: 24., color: Color::WHITE }),
                     text_anchor: Anchor::TopCenter,
                     text_2d_bounds: Text2dBounds::UNBOUNDED,
+                    transform: Transform::from_translation(Vec3::Z),
                     ..default()
                 }));
             });
