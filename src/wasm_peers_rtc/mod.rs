@@ -29,8 +29,6 @@ impl Plugin for WasmPeersRtcPlugin {
     fn build(&self, app: &mut App) {
         if self.is_server {
             app.add_plugins(WasmPeersRtcServerPlugin {game_name: self.game_name.to_owned()});
-        } else { // is_client
-            // app.add_plugins(WasmPeersRtcClientPlugin {game_name: self.game_name.to_owned()});
         }
     }
 }
@@ -129,78 +127,6 @@ impl WasmPeersRtcServerPlugin {
             }
         }
     }
-}
-
-struct WasmPeersRtcClientPlugin {
-    game_name: String
-}
-
-impl Plugin for WasmPeersRtcClientPlugin {
-    fn build(&self, app: &mut App) {
-        app.add_systems(Startup, Self::setup);
-        app.add_systems(Update, Self::update);
-        let network_channels = app.world.resource::<NetworkChannels>();
-        let connection_config = ConnectionConfig {
-            server_channels_config: network_channels.get_server_configs(),
-            client_channels_config: network_channels.get_client_configs(),
-            ..Default::default()
-        };
-        let client = RenetClient::new(connection_config);
-        app.insert_resource(client);
-        app.insert_non_send_resource::<Rc<RefCell<Option<AsyncWebRtcBrowser>>>>(Rc::new(RefCell::new(None)));
-        app.insert_non_send_resource::<Rc<RefCell<Option<AsyncWebRtcClient>>>>(Rc::new(RefCell::new(None)));
-    }
-}
-
-impl WasmPeersRtcClientPlugin {
-    fn setup(world: &mut World) {
-        let rtc_client_clone = world.non_send_resource::<Rc<RefCell<Option<AsyncWebRtcClient>>>>().clone();
-        spawn_local(async move {
-            client(rtc_client_clone).await.expect("Client not OK");
-        });
-    }
-
-    fn update(
-        rtc_client: NonSendMut<Rc<RefCell<Option<AsyncWebRtcClient>>>>,
-        mut renet_client: ResMut<RenetClient>
-    ) {
-        // TODO handle .set_connecting()
-        if let Some(rtc_client) = rtc_client.borrow_mut().as_mut() {
-            renet_client.set_connected();
-
-            // TODO handle transport-disconnect
-            
-            // Handle incoming packets
-            let packets: Vec<Vec<u8>> = rtc_client.channel().drain().unwrap();
-            for packet in packets {
-                renet_client.process_packet(&packet);
-            }
-
-            // Handle outgoing packets
-            let packets = renet_client.get_packets_to_send();
-            for packet in packets {
-                rtc_client.channel().send(packet).unwrap();
-            }
-        }
-    }
-}
-
-async fn client(result: Rc<RefCell<Option<AsyncWebRtcClient>>>) -> Result<JsValue, JsValue> {
-    let (browser, server_id) = loop {
-        let browser = AsyncWebRtcBrowser::new("wss://rose-signalling.webpubsub.azure.com/client/hubs/onlineservers").await?;
-        let next = browser.iter().next();
-        if let Some((server_id, server_entry)) = next {
-            console_log!("Client: connecting to server {:?} @ {}", server_entry, server_id);
-            let server_id = server_id.to_owned();
-            break (browser, server_id);
-        }
-        console_log!("No servers available yet...");
-        JsFuture::from(Promise::new(&mut |resolve, _| setTimeout(resolve, 5000))).await.unwrap();
-    };
-    let client = browser.connect(server_id.to_owned()).await?;
-    *result.borrow_mut() = Some(client);
-    console_log!("Client: connected!");
-    Ok(JsValue::undefined())
 }
 
 async fn server(game_name: String, server_name: String, result: Rc<RefCell<Option<WebRtcServer>>>) -> Result<JsValue, JsValue> {
