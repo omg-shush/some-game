@@ -7,7 +7,7 @@ use renet::{RenetServer, ConnectionConfig, RenetClient, ClientId};
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::{spawn_local, JsFuture};
 
-use webrtc::{AsyncWebRtcBrowser, WebRtcServer};
+use webrtc::{AsyncWebRtcBrowser, AsyncWebRtcServer};
 use util::*;
 
 use self::{webrtc::AsyncWebRtcClient, signaling::ConnectionId};
@@ -18,6 +18,7 @@ mod webrtc;
 mod signaling;
 pub mod util;
 pub mod client;
+pub mod server;
 
 pub struct WasmPeersRtcPlugin {
     pub is_server: bool,
@@ -68,7 +69,7 @@ impl WasmPeersRtcServerPlugin {
     }
 
     fn update(
-        rtc_server: NonSendMut<Rc<RefCell<Option<WebRtcServer>>>>,
+        rtc_server: NonSendMut<Rc<RefCell<Option<AsyncWebRtcServer>>>>,
         mut renet_server: ResMut<RenetServer>,
         mut client_to_connection: NonSendMut<HashMap<ClientId, ConnectionId>>,
         mut connection_to_client: NonSendMut<HashMap<ConnectionId, ClientId>>
@@ -129,9 +130,9 @@ impl WasmPeersRtcServerPlugin {
     }
 }
 
-async fn server(game_name: String, server_name: String, result: Rc<RefCell<Option<WebRtcServer>>>) -> Result<JsValue, JsValue> {
+async fn server(game_name: String, server_name: String, result: Rc<RefCell<Option<AsyncWebRtcServer>>>) -> Result<JsValue, JsValue> {
     console_log!("\t\tServer: Registering... game: {}, name: {}", game_name, server_name);
-    let server = WebRtcServer::new("wss://rose-signalling.webpubsub.azure.com/client/hubs/onlineservers", &game_name, &server_name).await?;
+    let server = AsyncWebRtcServer::new("wss://rose-signalling.webpubsub.azure.com/client/hubs/onlineservers", &game_name, &server_name).await?;
     *result.borrow_mut() = Some(server);
     console_log!("\t\tServer: Registered.");
     Ok(JsValue::undefined())

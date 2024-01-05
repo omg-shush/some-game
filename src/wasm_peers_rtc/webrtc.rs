@@ -186,14 +186,14 @@ impl DerefMut for AsyncWebRtcClient {
 }
 
 #[derive(Clone)]
-pub struct WebRtcServer {
+pub struct AsyncWebRtcServer {
     signaling: SendRecvCallbackChannel,
     pub clients: Rc<RefCell<HashMap<ConnectionId, SendRecvCallbackChannel>>>,
     pub new_clients: Rc<RefCell<VecDeque<ConnectionId>>>
 }
 
-impl WebRtcServer {
-    pub async fn new(signaling_url: &str, game_name: &str, server_name: &str) -> Result<WebRtcServer, JsValue> {
+impl AsyncWebRtcServer {
+    pub async fn new(signaling_url: &str, game_name: &str, server_name: &str) -> Result<AsyncWebRtcServer, JsValue> {
         // Register as a server
         let websocket = WebSocket::new(signaling_url)?;
         let mut ws = SendRecvCallbackChannel::new(Box::new(websocket)).await?;
@@ -202,7 +202,7 @@ impl WebRtcServer {
         // Discard list of existing servers
         let _: SignalingMessage = ws.recv().await?;
 
-        let server = WebRtcServer {
+        let server = AsyncWebRtcServer {
             signaling: ws.clone(),
             clients: Rc::new(RefCell::new(HashMap::new())),
             new_clients: Rc::new(RefCell::new(VecDeque::new()))
