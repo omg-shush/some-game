@@ -4,7 +4,7 @@ use bevy::prelude::*;
 use bevy_inspector_egui::quick::StateInspectorPlugin;
 use wasm_bindgen_futures::spawn_local;
 
-use super::{webrtc::AsyncWebRtcServer, util::{js_warn, console_warn}};
+use super::webrtc::AsyncWebRtcServer;
 
 pub struct WebRtcServerPlugin {
     pub is_headless: bool
@@ -69,7 +69,7 @@ impl WebRtcServer {
         spawn_local(async move {
             match AsyncWebRtcServer::new(&signaling_url, &game_name, &server_name).await {
                 Ok(s) => *server_clone.server.borrow_mut() = Some(s),
-                Err(e) => console_warn!("Error creating AsyncWebRtcServer: {:?}", e),
+                Err(e) => warn!("Error creating AsyncWebRtcServer: {:?}", e),
             }
         });
         server

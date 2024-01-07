@@ -1,9 +1,6 @@
-use std::env;
-use bevy_replicon::{ReplicationPlugins, client::ClientPlugin, server::{ServerPlugin, ServerSet}, replicon_core::replication_rules::MapNetworkEntities};
-use player::Player;
+use bevy_replicon::{ReplicationPlugins, client::ClientPlugin, server::ServerPlugin, replicon_core::replication_rules::MapNetworkEntities};
 use position::Position;
 use serde::{Deserialize, Serialize};
-use wasm_bindgen::prelude::*;
 use bevy::{prelude::*, log::{LogPlugin, Level}, window::CursorGrabMode};
 use bevy_inspector_egui::quick::WorldInspectorPlugin;
 use enemy::EnemySpawner;
@@ -15,7 +12,7 @@ use clap::Parser;
 
 use crate::{
     enemy::EnemyPlugin, player::PlayerPlugin, player_controller::PlayerControllerPlugin,
-    world::WorldPlugin, projectile::ProjectilePlugin, wasm_peers_rtc::{WasmPeersRtcPlugin, util::{console_log, js_log}, client::{WebRtcClient, WebRtcBrowserState, WebRtcClientPlugin}}, position::PositionPlugin,
+    world::WorldPlugin, projectile::ProjectilePlugin, wasm_peers_rtc::{WasmPeersRtcPlugin, client::{WebRtcClient, WebRtcBrowserState, WebRtcClientPlugin}}, position::PositionPlugin,
 };
 
 mod enemy;
@@ -26,17 +23,12 @@ mod world;
 mod wasm_peers_rtc;
 mod position;
 
-#[wasm_bindgen]
-extern "C" {
-    #[wasm_bindgen(js_namespace = console)]
-    pub fn log(s: &str);
-}
-
 #[derive(Serialize, Deserialize, Default, Debug, Resource, Parser)]
 struct Params {
-    #[clap(default_value_t = false)]
+    #[clap(default_value_t = false, long = "server")]
     #[serde(default = "default_is_server")]
     is_server: bool,
+    #[clap(long = "username")]
     username: String
 }
 
@@ -147,7 +139,7 @@ fn setup_client(mut commands: Commands, asset_server: Res<AssetServer>) {
 }
 
 fn client_open_browser(world: &mut World) {
-    console_log!("Opening browser...");
+    info!("Opening browser...");
     world.insert_non_send_resource(WebRtcBrowser::new("wss://rose-signalling.webpubsub.azure.com/client/hubs/onlineservers".to_owned()));
 }
 
@@ -156,13 +148,13 @@ fn client_open_client(world: &mut World) {
     let servers = browser.servers().unwrap();
     if servers.len() > 0 {
         let (server_connection, server_entry) = servers.into_iter().next().unwrap();
-        console_log!("Client: connecting to server {:?} @ {}", server_entry, server_connection);
+        info!("Client: connecting to server {:?} @ {}", server_entry, server_connection);
         let browser = world.remove_non_send_resource::<WebRtcBrowser>().unwrap();
         let client = browser.connect(server_connection);
         world.insert_non_send_resource(client);
         return;
     }
-    console_log!("No servers online yet...");
+    info!("No servers online yet...");
     *browser = WebRtcBrowser::new("wss://rose-signalling.webpubsub.azure.com/client/hubs/onlineservers".to_owned()); // TODO proper refresh()
 }
 

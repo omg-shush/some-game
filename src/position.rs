@@ -1,5 +1,5 @@
 use bevy::prelude::*;
-use bevy_replicon::{client::ClientSet, replicon_core::replication_rules::AppReplicationExt, server::ServerSet};
+use bevy_replicon::replicon_core::replication_rules::AppReplicationExt;
 use serde::{Serialize, Deserialize};
 
 pub struct PositionPlugin {

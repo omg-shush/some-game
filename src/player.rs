@@ -1,12 +1,11 @@
-use std::{io::Cursor, collections::HashMap};
+use std::collections::HashMap;
 
-use bevy::{prelude::*, sprite::Anchor, ptr::Ptr, text::Text2dBounds};
-use bevy_replicon::{replicon_core::{replication_rules::{AppReplicationExt, self, Replication}, replicon_tick::RepliconTick}, bincode, network_event::{client_event::{ClientEventAppExt, FromClient}, EventType, server_event::{ServerEventAppExt, ToClients, SendMode}}};
+use bevy::{prelude::*, sprite::Anchor, text::Text2dBounds};
+use bevy_replicon::{replicon_core::replication_rules::{AppReplicationExt, Replication}, network_event::{client_event::{ClientEventAppExt, FromClient}, EventType, server_event::{ServerEventAppExt, ToClients, SendMode}}};
 use renet::{RenetClient, ClientId, ServerEvent};
 use serde::{Serialize, Deserialize};
 
-use crate::{Params, player_controller::PlayerController, wasm_peers_rtc::{util::{console_warn, console_log}, client::WebRtcClientState}, position::Position};
-use crate::wasm_peers_rtc::util::{js_log, js_warn};
+use crate::{Params, player_controller::PlayerController, wasm_peers_rtc::client::WebRtcClientState, position::Position};
 
 pub struct PlayerPlugin {
     pub is_server: bool
@@ -49,7 +48,7 @@ struct PlayerSpawnEvent {
 fn join_server(client: Res<RenetClient>, mut connected: Local<bool>, mut writer: EventWriter<PlayerJoinEvent>, params: Res<Params>) {
     if !*connected && client.is_connected() {
         *connected = true;
-        console_log!("Sending PlayerJoinEvent!");
+        info!("Sending PlayerJoinEvent!");
         writer.send(PlayerJoinEvent { username: params.username.to_owned() });
     }
 }
@@ -124,7 +123,7 @@ pub struct Score {
 #[derive(Component)]
 struct ScoreText {}
 
-fn added_players(mut commands: Commands, query: Query<(Entity, &Player), Added<Player>>, asset_server: ResMut<AssetServer>, params: Res<Params>) {
+fn added_players(mut commands: Commands, query: Query<(Entity, &Player), Added<Player>>, asset_server: ResMut<AssetServer>) {
     for (entity, player) in query.iter() {
         if let Some(mut entity) = commands.get_entity(entity) {
             entity.insert((
@@ -183,7 +182,7 @@ fn player_moved(mut reader: EventReader<FromClient<PlayerMoveEvent>>, mapping: R
             Some(())
         }
         if player_move(&mapping, evt.client_id, &mut players, evt.event.delta).is_none() {
-            console_warn!("Failed to handle PlayerMoveEvent");
+            warn!("Failed to handle PlayerMoveEvent");
         };
     }
 }

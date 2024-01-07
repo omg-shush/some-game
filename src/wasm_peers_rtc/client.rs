@@ -6,8 +6,7 @@ use bevy_replicon::replicon_core::NetworkChannels;
 use renet::{RenetClient, ConnectionConfig};
 use wasm_bindgen_futures::spawn_local;
 
-use crate::wasm_peers_rtc::{js_warn, util::{console_log, js_log}};
-use super::{webrtc::{AsyncWebRtcBrowser, AsyncWebRtcClient}, util::console_warn, signaling::{ServerEntry, ConnectionId}, callback_channel::SendRecvCallbackChannel};
+use super::{webrtc::{AsyncWebRtcBrowser, AsyncWebRtcClient}, signaling::{ServerEntry, ConnectionId}, callback_channel::SendRecvCallbackChannel};
 
 pub struct WebRtcClientPlugin {
     pub is_headless: bool
@@ -136,8 +135,8 @@ impl WebRtcBrowser {
         let browser_clone = browser.clone();
         spawn_local(async move {
             match AsyncWebRtcBrowser::new(&signaling_url).await {
-                Ok(b) => {console_log!("Storing Browser result"); *browser_clone.browser.borrow_mut() = Some(b)},
-                Err(e) => console_warn!("Error creating AsyncWebRtcBrowser: {:?}", e),
+                Ok(b) => {info!("Storing Browser result"); *browser_clone.browser.borrow_mut() = Some(b)},
+                Err(e) => warn!("Error creating AsyncWebRtcBrowser: {:?}", e),
             }
         });
         browser
@@ -154,7 +153,7 @@ impl WebRtcBrowser {
             spawn_local(async move {
                 match browser.connect(server_id).await {
                     Ok(c) => *client_clone.client.borrow_mut() = Some(c),
-                    Err(e) => console_warn!("Error creating AsyncWebRtcClient: {:?}", e),
+                    Err(e) => warn!("Error creating AsyncWebRtcClient: {:?}", e),
                 }
             })
         });

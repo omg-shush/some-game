@@ -15,7 +15,7 @@ impl Plugin for ProjectilePlugin {
         if self.is_server {
             app.add_systems(Update, (player_shoot, step, collide));
         } else {
-            app.add_systems(Update, (update, added_projectile));
+            app.add_systems(Update, added_projectile);
         }
     }
 }
@@ -75,14 +75,6 @@ fn added_projectile(
             Anchor::Center,
         ));
     }
-}
-
-fn update(
-    mut projectiles: Query<(&Projectile, &mut Text)>
-) {
-    // for (p, mut t) in projectiles.iter_mut() {
-    //     t.sections[0].value = format!("{}", p.min_dist);
-    // }
 }
 
 fn step(mut commands: Commands, mut projectiles: Query<(Entity, &Projectile, &mut Position)>, time: Res<Time>) {
