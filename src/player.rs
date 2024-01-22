@@ -5,11 +5,9 @@ use bevy_replicon::{replicon_core::replication_rules::{AppReplicationExt, Replic
 use renet::{RenetClient, ClientId, ServerEvent};
 use serde::{Serialize, Deserialize};
 
-use crate::{Params, player_controller::PlayerController, wasm_peers_rtc::client::WebRtcClientState, position::Position};
+use crate::{player_controller::PlayerController, position::Position, MultiplayerType, PlayerInfo};
 
-pub struct PlayerPlugin {
-    pub is_server: bool
-}
+pub struct PlayerPlugin {}
 
 impl Plugin for PlayerPlugin {
     fn build(&self, app: &mut App) {
@@ -18,14 +16,13 @@ impl Plugin for PlayerPlugin {
         app.add_client_event::<PlayerJoinEvent>(EventType::Ordered);
         app.add_server_event::<PlayerSpawnEvent>(EventType::Ordered);
         app.add_client_event::<PlayerMoveEvent>(EventType::Ordered);
-        if self.is_server {
-            app.add_systems(Update, (player_joined, player_moved, handle_events_system));
-            app.init_resource::<ClientPlayers>();
-        } else {
-            app.add_systems(Update, (added_players, update, player_spawned, my_player));
-            app.add_systems(Update, join_server.run_if(resource_exists::<RenetClient>()));
-            app.init_resource::<ResClientId>();
-        }
+
+        app.add_systems(Update, (player_joined, player_moved, handle_events_system).run_if(MultiplayerType::state_is_server()));
+        app.init_resource::<ClientPlayers>();
+
+        app.add_systems(Update, (added_players, update, player_spawned, my_player).run_if(MultiplayerType::state_is_client()));
+        app.add_systems(Update, join_server.run_if(resource_exists::<RenetClient>()));
+        app.init_resource::<ResClientId>();
     }
 }
 
@@ -45,11 +42,11 @@ struct PlayerSpawnEvent {
     client_id: u32
 }
 
-fn join_server(client: Res<RenetClient>, mut connected: Local<bool>, mut writer: EventWriter<PlayerJoinEvent>, params: Res<Params>) {
+fn join_server(client: Res<RenetClient>, mut connected: Local<bool>, mut writer: EventWriter<PlayerJoinEvent>, player_info: Res<PlayerInfo>) {
     if !*connected && client.is_connected() {
         *connected = true;
         info!("Sending PlayerJoinEvent!");
-        writer.send(PlayerJoinEvent { username: params.username.to_owned() });
+        writer.send(PlayerJoinEvent { username: player_info.username.to_owned() });
     }
 }
 

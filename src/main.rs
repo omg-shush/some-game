@@ -1,10 +1,8 @@
-use std::fmt::Display;
-
-use bevy_replicon::{ReplicationPlugins, client::ClientPlugin, server::ServerPlugin, replicon_core::replication_rules::MapNetworkEntities};
+use bevy_replicon::{ReplicationPlugins, replicon_core::replication_rules::MapNetworkEntities};
 use position::Position;
 use serde::{Deserialize, Serialize};
 use bevy::{prelude::*, log::{LogPlugin, Level}, window::CursorGrabMode};
-use bevy_egui::{egui, EguiContexts, EguiPlugin};
+use bevy_egui::EguiPlugin;
 use bevy_inspector_egui::quick::WorldInspectorPlugin;
 use enemy::EnemySpawner;
 use player_controller::{Cursor, CursorSprite, PlayerController};
@@ -12,11 +10,9 @@ use projectile::{Projectile, ProjectileHits};
 use wasm_peers_rtc::client::WebRtcBrowser;
 #[cfg(target_arch = "wasm32")]
 use web_sys::window;
-use clap::{Parser, ValueEnum};
 
 use crate::{
-    enemy::EnemyPlugin, player::PlayerPlugin, player_controller::PlayerControllerPlugin,
-    world::WorldPlugin, projectile::ProjectilePlugin, wasm_peers_rtc::{browser::WebRtcBrowserPlugin, client::{WebRtcBrowserState, WebRtcClientPlugin}, server::{WebRtcServer, WebRtcServerPlugin}}, position::PositionPlugin,
+    enemy::EnemyPlugin, main_menu::{MainMenuPlugin, MainMenuState}, player::PlayerPlugin, player_controller::PlayerControllerPlugin, position::PositionPlugin, projectile::ProjectilePlugin, wasm_peers_rtc::{browser::WebRtcBrowserPlugin, client::WebRtcClientPlugin, server::{WebRtcServer, WebRtcServerPlugin}}, world::WorldPlugin
 };
 
 mod enemy;
@@ -26,58 +22,61 @@ mod projectile;
 mod world;
 mod wasm_peers_rtc;
 mod position;
+mod main_menu;
 
-#[derive(Serialize, Deserialize, Debug, Default, Resource, Parser, Clone, ValueEnum)]
+#[derive(States, Default, Debug, Hash, PartialEq, Eq, Clone)]
 enum MultiplayerType {
+    #[default]
+    Undecided,
     DedicatedServer,
     Server,
     Client,
-    #[default]
     Singleplayer
-}
-
-impl Display for MultiplayerType {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            MultiplayerType::DedicatedServer => f.write_str("Dedicated Server"),
-            MultiplayerType::Server => f.write_str("Local Server"),
-            MultiplayerType::Client => f.write_str("Local Client"),
-            MultiplayerType::Singleplayer => f.write_str("Singleplayer"),
-        }
-    }
 }
 
 impl MultiplayerType {
     pub fn is_playable(&self) -> bool {
         match self {
-            MultiplayerType::DedicatedServer => false,
+            MultiplayerType::DedicatedServer | MultiplayerType::Undecided => false,
             MultiplayerType::Server | MultiplayerType::Client | MultiplayerType::Singleplayer => true,
         }
     }
+    pub fn state_is_playable() -> impl FnMut(Option<Res<State<MultiplayerType>>>) -> bool + Clone {
+        move |current_state: Option<Res<State<MultiplayerType>>>| current_state.is_some() && current_state.unwrap().is_playable()
+    }
     pub fn is_client(&self) -> bool {
         match self {
-            MultiplayerType::DedicatedServer | MultiplayerType::Server | MultiplayerType::Singleplayer => false,
+            MultiplayerType::DedicatedServer | MultiplayerType::Server | MultiplayerType::Singleplayer | MultiplayerType::Undecided => false,
             MultiplayerType::Client => true,
         }
+    }
+    pub fn state_is_client() -> impl FnMut(Option<Res<State<MultiplayerType>>>) -> bool + Clone {
+        move |current_state: Option<Res<State<MultiplayerType>>>| current_state.is_some() && current_state.unwrap().is_client()
     }
     pub fn is_server(&self) -> bool {
         match self {
             MultiplayerType::DedicatedServer | MultiplayerType::Server => true,
-            MultiplayerType::Client | MultiplayerType::Singleplayer => false,
+            MultiplayerType::Client | MultiplayerType::Singleplayer | MultiplayerType::Undecided => false,
         }
+    }
+    pub fn state_is_server() -> impl FnMut(Option<Res<State<MultiplayerType>>>) -> bool + Clone {
+        move |current_state: Option<Res<State<MultiplayerType>>>| current_state.is_some() && current_state.unwrap().is_server()
+    }
+    pub fn is_authoritative(&self) -> bool {
+        match self {
+            MultiplayerType::DedicatedServer | MultiplayerType::Server | MultiplayerType::Singleplayer => true,
+            MultiplayerType::Client | MultiplayerType::Undecided => false,
+        }
+    }
+    pub fn state_is_authoritative() -> impl FnMut(Option<Res<State<MultiplayerType>>>) -> bool + Clone {
+        move |current_state: Option<Res<State<MultiplayerType>>>| current_state.is_some() && current_state.unwrap().is_authoritative()
     }
 }
 
-#[derive(Serialize, Deserialize, Default, Debug, Resource, Parser)]
-struct Params {
-    #[clap(default_value = "singleplayer", long = "type")]
-    #[serde(default = "default_type")]
-    r#type: MultiplayerType,
-    #[clap(long = "username")]
-    username: String
+#[derive(Resource)]
+pub struct PlayerInfo {
+    pub username: String,
 }
-
-fn default_type() -> MultiplayerType { MultiplayerType::Singleplayer }
 
 fn main() {
     println!("Hello, world!");
@@ -86,17 +85,24 @@ fn main() {
     console_error_panic_hook::set_once();
 
     #[cfg(not(target_arch = "wasm32"))]
-    let params = {
-        let params = Params::parse();
-        println!("Params: {:?}", params);
-        params
-    };
+    let headless = true;
 
     #[cfg(target_arch = "wasm32")]
-    let params = {
-        let params: Params = serde_urlencoded::from_str(window().unwrap().document().unwrap().location().unwrap().search().unwrap().split_at(1).1).unwrap();
-        info!("Params: {:?}", params);
-        params
+    let headless = {
+        let mut headless = false;
+        if let Some(window) = window() {
+            if let Some(document) = window.document() {
+                if let Some(location) = document.location() {
+                    if let Ok(search) = location.search() {
+                        if search.len() > 1 {
+                            let query = search.split_at(1).1;
+                            headless = query == "headless";
+                        }
+                    }
+                }
+            }
+        }
+        headless
     };
 
     #[cfg(debug_assertions)]
@@ -104,12 +110,14 @@ fn main() {
     #[cfg(not(debug_assertions))]
     let canvas = Some("#canvas".to_string());
 
-    let is_server = params.r#type.is_server();
     let mut app = App::new();
     app.add_plugins(LogPlugin {filter: "wgpu_hal=off,wgpu_core=off,some-game=info".to_string(), level: Level::INFO});
-    if !params.r#type.is_playable() {
+    app.add_state::<MultiplayerType>();
+    if headless {
         app.add_plugins(MinimalPlugins);
+        app.insert_resource(State::new(MultiplayerType::DedicatedServer));
     } else {
+        app.insert_resource(PlayerInfo { username: "username here".to_owned() }); // TODO user input
         app.add_plugins(DefaultPlugins
             .set(WindowPlugin {
                 primary_window: Some(Window {
@@ -128,39 +136,32 @@ fn main() {
 
         #[cfg(debug_assertions)]
         app.add_plugins(WorldInspectorPlugin::new());
+
+        app.add_plugins(MainMenuPlugin {});
+        app.add_state::<MainMenuState>();
     }
-    if params.r#type.is_server() {
-        app.add_plugins(ReplicationPlugins.build().disable::<ClientPlugin>());
-    } else if params.r#type.is_client() {
-        app.add_plugins(ReplicationPlugins.build().disable::<ServerPlugin>());
-    }
+    app.add_plugins(ReplicationPlugins);
     app.add_plugins((
-        PlayerPlugin {is_server},
-        WorldPlugin {is_server},
-        EnemyPlugin {is_server},
-        ProjectilePlugin {is_server},
-        PositionPlugin {is_server},
+        PlayerPlugin {},
+        WorldPlugin {},
+        EnemyPlugin {},
+        ProjectilePlugin {},
+        PositionPlugin {},
     ));
-    if params.r#type.is_server() {
-        app.add_plugins(WebRtcServerPlugin {is_headless: is_server});
-    } else if params.r#type.is_client() {
-        app.add_plugins(WebRtcClientPlugin {is_headless: !params.r#type.is_playable()});
-        app.add_plugins(WebRtcBrowserPlugin {});
-    }
-    app.insert_resource(params);
-    if is_server {
-        app.add_systems(Startup, setup_server);
-        app.add_systems(Startup, server_open_server);
-    } else {
-        app.add_systems(Startup, setup_client);
-        app.add_systems(Update, player_shoot);
-        app.add_systems(Startup, client_open_browser);
-    }
+    app.add_plugins(WebRtcServerPlugin {is_headless: headless});
+    app.add_plugins(WebRtcClientPlugin {is_headless: headless});
+    app.add_plugins(WebRtcBrowserPlugin {});
+
+    app.add_systems(Startup, setup_world.run_if(MultiplayerType::state_is_authoritative()));
+    app.add_systems(Startup, server_open_server.run_if(MultiplayerType::state_is_server()));
+    app.add_systems(Startup, setup_client.run_if(MultiplayerType::state_is_playable()));
+    app.add_systems(Update, player_shoot.run_if(MultiplayerType::state_is_playable()));
+    app.add_systems(Startup, client_open_browser.run_if(MultiplayerType::state_is_client()));
 
     app.run();
 }
 
-fn setup_server(mut commands: Commands) {
+fn setup_world(mut commands: Commands) {
     commands.spawn((
         EnemySpawner {
             image: "enemy.png".to_owned(),
