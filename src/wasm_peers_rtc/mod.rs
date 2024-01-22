@@ -5,3 +5,4 @@ mod signaling;
 pub mod util;
 pub mod client;
 pub mod server;
+pub mod browser;

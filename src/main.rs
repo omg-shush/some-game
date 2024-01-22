@@ -15,7 +15,7 @@ use clap::{Parser, ValueEnum};
 
 use crate::{
     enemy::EnemyPlugin, player::PlayerPlugin, player_controller::PlayerControllerPlugin,
-    world::WorldPlugin, projectile::ProjectilePlugin, wasm_peers_rtc::{client::{WebRtcBrowserState, WebRtcClientPlugin}, server::{WebRtcServer, WebRtcServerPlugin}}, position::PositionPlugin,
+    world::WorldPlugin, projectile::ProjectilePlugin, wasm_peers_rtc::{browser::WebRtcBrowserPlugin, client::{WebRtcBrowserState, WebRtcClientPlugin}, server::{WebRtcServer, WebRtcServerPlugin}}, position::PositionPlugin,
 };
 
 mod enemy;
@@ -141,6 +141,7 @@ fn main() {
         app.add_plugins(WebRtcServerPlugin {is_headless: is_server});
     } else if params.r#type.is_client() {
         app.add_plugins(WebRtcClientPlugin {is_headless: !params.r#type.is_playable()});
+        app.add_plugins(WebRtcBrowserPlugin {});
     }
     app.insert_resource(params);
     if is_server {
@@ -150,7 +151,6 @@ fn main() {
         app.add_systems(Startup, setup_client);
         app.add_systems(Update, player_shoot);
         app.add_systems(Startup, client_open_browser);
-        app.add_systems(Update, client_open_client.run_if(in_state(WebRtcBrowserState::Connected)));
     }
 
     app.run();
@@ -194,21 +194,6 @@ fn setup_client(mut commands: Commands) {
 fn client_open_browser(world: &mut World) {
     info!("Opening browser...");
     world.insert_non_send_resource(WebRtcBrowser::new("wss://rose-signalling.webpubsub.azure.com/client/hubs/onlineservers".to_owned()));
-}
-
-fn client_open_client(world: &mut World) {
-    let mut browser = world.non_send_resource_mut::<WebRtcBrowser>();
-    let servers = browser.servers().unwrap();
-    if servers.len() > 0 {
-        let (server_connection, server_entry) = servers.into_iter().next().unwrap(); // Pick first server in the list for now
-        info!("Client: connecting to server {:?} @ {}", server_entry, server_connection);
-        let browser = world.remove_non_send_resource::<WebRtcBrowser>().unwrap();
-        let client = browser.connect(server_connection);
-        world.insert_non_send_resource(client);
-        return;
-    }
-    info!("No servers online yet...");
-    *browser = WebRtcBrowser::new("wss://rose-signalling.webpubsub.azure.com/client/hubs/onlineservers".to_owned()); // TODO proper refresh()
 }
 
 fn server_open_server(world: &mut World) {
