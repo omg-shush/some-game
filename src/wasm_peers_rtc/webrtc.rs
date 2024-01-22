@@ -165,12 +165,6 @@ pub struct AsyncWebRtcClient {
     channel: SendRecvCallbackChannel
 }
 
-impl AsyncWebRtcClient {
-    pub fn channel(&mut self) -> &mut SendRecvCallbackChannel {
-        &mut self.channel
-    }
-}
-
 impl Deref for AsyncWebRtcClient {
     type Target = SendRecvCallbackChannel;
 
