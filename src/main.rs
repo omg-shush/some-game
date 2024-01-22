@@ -15,7 +15,7 @@ use clap::Parser;
 
 use crate::{
     enemy::EnemyPlugin, player::PlayerPlugin, player_controller::PlayerControllerPlugin,
-    world::WorldPlugin, projectile::ProjectilePlugin, wasm_peers_rtc::{WasmPeersRtcPlugin, util::{console_log, js_log}, client::{WebRtcClient, WebRtcBrowserState, WebRtcClientPlugin}}, position::PositionPlugin,
+    world::WorldPlugin, projectile::ProjectilePlugin, wasm_peers_rtc::{client::{WebRtcClient, WebRtcBrowserState, WebRtcClientPlugin}, server::{WebRtcServer, WebRtcServerPlugin}, util::{console_log, js_log}, WasmPeersRtcPlugin}, position::PositionPlugin,
 };
 
 mod enemy;
@@ -96,11 +96,13 @@ fn main() {
         ProjectilePlugin {is_server},
         PositionPlugin {is_server},
     ));
-    app.add_plugins(WasmPeersRtcPlugin {is_server, game_name: "some-game".to_owned(), server_name: "my-server".to_owned()}); // After all client events registered
+    // app.add_plugins(WasmPeersRtcPlugin {is_server, game_name: "some-game".to_owned(), server_name: "my-server".to_owned()}); // After all client events registered
+    app.add_plugins(WebRtcServerPlugin {is_headless: is_server});
     app.add_plugins(WebRtcClientPlugin {is_headless: is_server});
     app.insert_resource(params);
     if is_server {
         app.add_systems(Startup, setup_server);
+        app.add_systems(Startup, server_open_server);
     } else {
         app.add_systems(Startup, setup_client);
         app.add_systems(Update, player_shoot);
@@ -155,7 +157,7 @@ fn client_open_client(world: &mut World) {
     let mut browser = world.non_send_resource_mut::<WebRtcBrowser>();
     let servers = browser.servers().unwrap();
     if servers.len() > 0 {
-        let (server_connection, server_entry) = servers.into_iter().next().unwrap();
+        let (server_connection, server_entry) = servers.into_iter().next().unwrap(); // Pick first server in the list for now
         console_log!("Client: connecting to server {:?} @ {}", server_entry, server_connection);
         let browser = world.remove_non_send_resource::<WebRtcBrowser>().unwrap();
         let client = browser.connect(server_connection);
@@ -164,6 +166,11 @@ fn client_open_client(world: &mut World) {
     }
     console_log!("No servers online yet...");
     *browser = WebRtcBrowser::new("wss://rose-signalling.webpubsub.azure.com/client/hubs/onlineservers".to_owned()); // TODO proper refresh()
+}
+
+fn server_open_server(world: &mut World) {
+    info!("Opening server...");
+    world.insert_non_send_resource(WebRtcServer::new("wss://rose-signalling.webpubsub.azure.com/client/hubs/onlineservers".to_owned(), "my-server".to_owned(), "some-game".to_owned()));
 }
 
 #[derive(Event, Serialize, Deserialize)]
