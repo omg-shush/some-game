@@ -4,6 +4,7 @@ use bevy_replicon::{ReplicationPlugins, client::ClientPlugin, server::ServerPlug
 use position::Position;
 use serde::{Deserialize, Serialize};
 use bevy::{prelude::*, log::{LogPlugin, Level}, window::CursorGrabMode};
+use bevy_egui::{egui, EguiContexts, EguiPlugin};
 use bevy_inspector_egui::quick::WorldInspectorPlugin;
 use enemy::EnemySpawner;
 use player_controller::{Cursor, CursorSprite, PlayerController};
@@ -120,6 +121,9 @@ fn main() {
                 ..default()
             })
             .disable::<LogPlugin>());
+        if !app.is_plugin_added::<EguiPlugin>() {
+            app.add_plugins(EguiPlugin);
+        }
         app.add_plugins(PlayerControllerPlugin {});
 
         #[cfg(debug_assertions)]
