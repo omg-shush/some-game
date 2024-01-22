@@ -6,8 +6,6 @@ use bevy_replicon::replicon_core::NetworkChannels;
 use renet::{ClientId, ConnectionConfig, RenetServer};
 use wasm_bindgen_futures::spawn_local;
 
-use crate::wasm_peers_rtc::{console_log, js_log};
-
 use super::{callback_channel::SendRecvCallbackChannel, signaling::ConnectionId, webrtc::AsyncWebRtcServer};
 
 pub struct WebRtcServerPlugin {
@@ -114,7 +112,7 @@ impl WebRtcServerPlugin {
         }
 
         if disconnect.len() > 0 {
-            console_log!("Closing {:?}", disconnect);
+            info!("Closing {:?}", disconnect);
         }
         for connection in disconnect {
             rtc_server.remove_client(&connection);
@@ -125,7 +123,7 @@ impl WebRtcServerPlugin {
         }
 
         if client_change {
-            console_log!("Current connections: {:?}", rtc_server.clients().keys().collect::<Vec<_>>());
+            info!("Current connections: {:?}", rtc_server.clients().keys().collect::<Vec<_>>());
         }
     }
 }

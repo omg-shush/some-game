@@ -2,15 +2,13 @@ use std::{rc::Rc, cell::RefCell, collections::HashMap};
 
 use bevy::{prelude::*, utils::HashSet};
 use bevy_replicon::prelude::*;
-use js_sys::Promise;
-use renet::{RenetServer, ConnectionConfig, RenetClient, ClientId};
+use renet::{RenetServer, ConnectionConfig, ClientId};
 use wasm_bindgen::prelude::*;
-use wasm_bindgen_futures::{spawn_local, JsFuture};
+use wasm_bindgen_futures::spawn_local;
 
-use webrtc::{AsyncWebRtcBrowser, AsyncWebRtcServer};
-use util::*;
+use webrtc::AsyncWebRtcServer;
 
-use self::{webrtc::AsyncWebRtcClient, signaling::ConnectionId};
+use self::signaling::ConnectionId;
 
 mod callback_channel;
 mod deque_channel;
@@ -117,7 +115,7 @@ impl WasmPeersRtcServerPlugin {
             }
 
             if disconnect.len() > 0 {
-                console_log!("Closing {:?}", disconnect);
+                info!("Closing {:?}", disconnect);
             }
             for connection in disconnect {
                 rtc_server.clients.borrow_mut().remove(&connection);
@@ -131,9 +129,9 @@ impl WasmPeersRtcServerPlugin {
 }
 
 async fn server(game_name: String, server_name: String, result: Rc<RefCell<Option<AsyncWebRtcServer>>>) -> Result<JsValue, JsValue> {
-    console_log!("\t\tServer: Registering... game: {}, name: {}", game_name, server_name);
+    info!("\t\tServer: Registering... game: {}, name: {}", game_name, server_name);
     let server = AsyncWebRtcServer::new("wss://rose-signalling.webpubsub.azure.com/client/hubs/onlineservers", &game_name, &server_name).await?;
     *result.borrow_mut() = Some(server);
-    console_log!("\t\tServer: Registered.");
+    info!("\t\tServer: Registered.");
     Ok(JsValue::undefined())
 }
