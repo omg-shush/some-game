@@ -2,13 +2,13 @@ use bevy::prelude::*;
 use bevy_replicon::replicon_core::replication_rules::AppReplicationExt;
 use serde::{Serialize, Deserialize};
 
-use crate::MultiplayerType;
+use crate::Multiplayer;
 
 pub struct PositionPlugin {}
 
 impl Plugin for PositionPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Update, (Self::added, Self::update).run_if(MultiplayerType::state_is_playable()));
+        app.add_systems(Update, (Self::added, Self::update).run_if(Multiplayer::state_is_playable()));
 
         app.replicate::<Position>();
     }

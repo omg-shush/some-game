@@ -2,7 +2,7 @@ use bevy::{prelude::*, sprite::Anchor, text::{Text2dBounds, TextLayoutInfo}};
 use bevy_replicon::{network_event::{EventType, client_event::{ClientEventAppExt, FromClient}}, replicon_core::replication_rules::{Replication, AppReplicationExt}};
 use serde::{Deserialize, Serialize};
 
-use crate::{enemy::Enemy, player::{Player, Score}, position::Position, MultiplayerType, PlayerShootEvent};
+use crate::{enemy::Enemy, player::{Player, Score}, position::Position, Multiplayer, PlayerShootEvent};
 
 pub struct ProjectilePlugin {}
 
@@ -11,9 +11,9 @@ impl Plugin for ProjectilePlugin {
         app.add_mapped_client_event::<PlayerShootEvent>(EventType::Ordered);
         app.replicate::<Projectile>();
 
-        app.add_systems(Update, (player_shoot, step, collide).run_if(MultiplayerType::state_is_authoritative()));
+        app.add_systems(Update, (player_shoot, step, collide).run_if(Multiplayer::state_is_authoritative()));
 
-        app.add_systems(Update, added_projectile.run_if(MultiplayerType::state_is_playable()));
+        app.add_systems(Update, added_projectile.run_if(Multiplayer::state_is_playable()));
     }
 }
 

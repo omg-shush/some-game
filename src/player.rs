@@ -5,7 +5,7 @@ use bevy_replicon::{replicon_core::replication_rules::{AppReplicationExt, Replic
 use renet::{RenetClient, ClientId, ServerEvent};
 use serde::{Serialize, Deserialize};
 
-use crate::{player_controller::PlayerController, position::Position, MultiplayerType, PlayerInfo};
+use crate::{player_controller::PlayerController, position::Position, Multiplayer, PlayerInfo};
 
 pub struct PlayerPlugin {}
 
@@ -17,10 +17,10 @@ impl Plugin for PlayerPlugin {
         app.add_server_event::<PlayerSpawnEvent>(EventType::Ordered);
         app.add_client_event::<PlayerMoveEvent>(EventType::Ordered);
 
-        app.add_systems(Update, (player_joined, player_moved, handle_events_system).run_if(MultiplayerType::state_is_server()));
+        app.add_systems(Update, (player_joined, player_moved, handle_events_system).run_if(Multiplayer::state_is_server()));
         app.init_resource::<ClientPlayers>();
 
-        app.add_systems(Update, (added_players, update, player_spawned, my_player).run_if(MultiplayerType::state_is_client()));
+        app.add_systems(Update, (added_players, update, player_spawned, my_player).run_if(Multiplayer::state_is_client()));
         app.add_systems(Update, join_server.run_if(resource_exists::<RenetClient>()));
         app.init_resource::<ResClientId>();
     }

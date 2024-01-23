@@ -1,6 +1,6 @@
 use bevy::{prelude::*, utils::HashMap, sprite::{MaterialMesh2dBundle, Mesh2d}};
 
-use crate::MultiplayerType;
+use crate::Multiplayer;
 
 const CHUNK_SIZE: usize = 64;
 
@@ -8,9 +8,9 @@ pub struct WorldPlugin {}
 
 impl Plugin for WorldPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Startup, setup_server.run_if(MultiplayerType::state_is_server()));
+        app.add_systems(Startup, setup_server.run_if(Multiplayer::state_is_server()));
 
-        app.add_systems(Startup, setup_client.run_if(MultiplayerType::state_is_client()));
+        app.add_systems(Startup, setup_client.run_if(Multiplayer::state_is_client()));
     }
 }
 

@@ -3,15 +3,15 @@ use bevy_replicon::replicon_core::replication_rules::{AppReplicationExt, Replica
 use serde::{Serialize, Deserialize};
 use rand::prelude::*;
 
-use crate::{player::Player, position::Position, MultiplayerType};
+use crate::{player::Player, position::Position, Multiplayer};
 
 pub struct EnemyPlugin {}
 
 impl Plugin for EnemyPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Update, (update_enemies, update_spawners).run_if(MultiplayerType::state_is_authoritative()));
+        app.add_systems(Update, (update_enemies, update_spawners).run_if(Multiplayer::state_is_authoritative()));
 
-        app.add_systems(Update, added_enemies.run_if(MultiplayerType::state_is_playable()));
+        app.add_systems(Update, added_enemies.run_if(Multiplayer::state_is_playable()));
 
         app.replicate::<Enemy>();
     }

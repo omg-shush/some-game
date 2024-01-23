@@ -12,7 +12,7 @@ use wasm_peers_rtc::client::WebRtcBrowser;
 use web_sys::window;
 
 use crate::{
-    enemy::EnemyPlugin, main_menu::{MainMenuPlugin, MainMenuState}, player::PlayerPlugin, player_controller::PlayerControllerPlugin, position::PositionPlugin, projectile::ProjectilePlugin, wasm_peers_rtc::{browser::WebRtcBrowserPlugin, client::WebRtcClientPlugin, server::{WebRtcServer, WebRtcServerPlugin}}, world::WorldPlugin
+    enemy::EnemyPlugin, main_menu::{MainMenuPlugin, MainMenu}, player::PlayerPlugin, player_controller::PlayerControllerPlugin, position::PositionPlugin, projectile::ProjectilePlugin, wasm_peers_rtc::{browser::WebRtcBrowserPlugin, client::WebRtcClientPlugin, server::{WebRtcServer, WebRtcServerPlugin}}, world::WorldPlugin
 };
 
 mod enemy;
@@ -25,7 +25,7 @@ mod position;
 mod main_menu;
 
 #[derive(States, Default, Debug, Hash, PartialEq, Eq, Clone)]
-enum MultiplayerType {
+enum Multiplayer {
     #[default]
     Undecided,
     DedicatedServer,
@@ -34,42 +34,42 @@ enum MultiplayerType {
     Singleplayer
 }
 
-impl MultiplayerType {
+impl Multiplayer {
     pub fn is_playable(&self) -> bool {
         match self {
-            MultiplayerType::DedicatedServer | MultiplayerType::Undecided => false,
-            MultiplayerType::Server | MultiplayerType::Client | MultiplayerType::Singleplayer => true,
+            Multiplayer::DedicatedServer | Multiplayer::Undecided => false,
+            Multiplayer::Server | Multiplayer::Client | Multiplayer::Singleplayer => true,
         }
     }
-    pub fn state_is_playable() -> impl FnMut(Option<Res<State<MultiplayerType>>>) -> bool + Clone {
-        move |current_state: Option<Res<State<MultiplayerType>>>| current_state.is_some() && current_state.unwrap().is_playable()
+    pub fn state_is_playable() -> impl FnMut(Option<Res<State<Multiplayer>>>) -> bool + Clone {
+        move |current_state: Option<Res<State<Multiplayer>>>| current_state.is_some() && current_state.unwrap().is_playable()
     }
     pub fn is_client(&self) -> bool {
         match self {
-            MultiplayerType::DedicatedServer | MultiplayerType::Server | MultiplayerType::Singleplayer | MultiplayerType::Undecided => false,
-            MultiplayerType::Client => true,
+            Multiplayer::DedicatedServer | Multiplayer::Server | Multiplayer::Singleplayer | Multiplayer::Undecided => false,
+            Multiplayer::Client => true,
         }
     }
-    pub fn state_is_client() -> impl FnMut(Option<Res<State<MultiplayerType>>>) -> bool + Clone {
-        move |current_state: Option<Res<State<MultiplayerType>>>| current_state.is_some() && current_state.unwrap().is_client()
+    pub fn state_is_client() -> impl FnMut(Option<Res<State<Multiplayer>>>) -> bool + Clone {
+        move |current_state: Option<Res<State<Multiplayer>>>| current_state.is_some() && current_state.unwrap().is_client()
     }
     pub fn is_server(&self) -> bool {
         match self {
-            MultiplayerType::DedicatedServer | MultiplayerType::Server => true,
-            MultiplayerType::Client | MultiplayerType::Singleplayer | MultiplayerType::Undecided => false,
+            Multiplayer::DedicatedServer | Multiplayer::Server => true,
+            Multiplayer::Client | Multiplayer::Singleplayer | Multiplayer::Undecided => false,
         }
     }
-    pub fn state_is_server() -> impl FnMut(Option<Res<State<MultiplayerType>>>) -> bool + Clone {
-        move |current_state: Option<Res<State<MultiplayerType>>>| current_state.is_some() && current_state.unwrap().is_server()
+    pub fn state_is_server() -> impl FnMut(Option<Res<State<Multiplayer>>>) -> bool + Clone {
+        move |current_state: Option<Res<State<Multiplayer>>>| current_state.is_some() && current_state.unwrap().is_server()
     }
     pub fn is_authoritative(&self) -> bool {
         match self {
-            MultiplayerType::DedicatedServer | MultiplayerType::Server | MultiplayerType::Singleplayer => true,
-            MultiplayerType::Client | MultiplayerType::Undecided => false,
+            Multiplayer::DedicatedServer | Multiplayer::Server | Multiplayer::Singleplayer => true,
+            Multiplayer::Client | Multiplayer::Undecided => false,
         }
     }
-    pub fn state_is_authoritative() -> impl FnMut(Option<Res<State<MultiplayerType>>>) -> bool + Clone {
-        move |current_state: Option<Res<State<MultiplayerType>>>| current_state.is_some() && current_state.unwrap().is_authoritative()
+    pub fn state_is_authoritative() -> impl FnMut(Option<Res<State<Multiplayer>>>) -> bool + Clone {
+        move |current_state: Option<Res<State<Multiplayer>>>| current_state.is_some() && current_state.unwrap().is_authoritative()
     }
 }
 
@@ -112,12 +112,12 @@ fn main() {
 
     let mut app = App::new();
     app.add_plugins(LogPlugin {filter: "wgpu_hal=off,wgpu_core=off,some-game=info".to_string(), level: Level::INFO});
-    app.add_state::<MultiplayerType>();
+    app.add_state::<Multiplayer>();
     if headless {
         app.add_plugins(MinimalPlugins);
-        app.insert_resource(State::new(MultiplayerType::DedicatedServer));
+        app.insert_resource(State::new(Multiplayer::DedicatedServer));
     } else {
-        app.insert_resource(PlayerInfo { username: "username here".to_owned() }); // TODO user input
+        app.insert_resource(PlayerInfo { username: "default username".to_owned() });
         app.add_plugins(DefaultPlugins
             .set(WindowPlugin {
                 primary_window: Some(Window {
@@ -138,7 +138,7 @@ fn main() {
         app.add_plugins(WorldInspectorPlugin::new());
 
         app.add_plugins(MainMenuPlugin {});
-        app.add_state::<MainMenuState>();
+        app.add_state::<MainMenu>();
     }
     app.add_plugins(ReplicationPlugins);
     app.add_plugins((
@@ -152,11 +152,25 @@ fn main() {
     app.add_plugins(WebRtcClientPlugin {is_headless: headless});
     app.add_plugins(WebRtcBrowserPlugin {});
 
-    app.add_systems(Startup, setup_world.run_if(MultiplayerType::state_is_authoritative()));
-    app.add_systems(Startup, server_open_server.run_if(MultiplayerType::state_is_server()));
-    app.add_systems(Startup, setup_client.run_if(MultiplayerType::state_is_playable()));
-    app.add_systems(Update, player_shoot.run_if(MultiplayerType::state_is_playable()));
-    app.add_systems(Startup, client_open_browser.run_if(MultiplayerType::state_is_client()));
+    // app.add_systems(Startup, setup_world.run_if(Multiplayer::state_is_authoritative()));
+    app.add_systems(OnEnter(Multiplayer::DedicatedServer), setup_world);
+    app.add_systems(OnEnter(Multiplayer::Server), setup_world);
+    app.add_systems(OnEnter(Multiplayer::Singleplayer), setup_world);
+
+    // app.add_systems(Startup, server_open_server.run_if(Multiplayer::state_is_server()));
+    app.add_systems(OnEnter(Multiplayer::DedicatedServer), server_open_server);
+    app.add_systems(OnEnter(Multiplayer::Server), server_open_server);
+
+    // app.add_systems(Startup, setup_client.run_if(Multiplayer::state_is_playable()));
+    app.add_systems(OnEnter(Multiplayer::Server), setup_client);
+    app.add_systems(OnEnter(Multiplayer::Client), setup_client);
+    app.add_systems(OnEnter(Multiplayer::Singleplayer), setup_client);
+
+    
+    app.add_systems(Update, player_shoot.run_if(Multiplayer::state_is_playable()));
+
+    // app.add_systems(Startup, client_open_browser.run_if(Multiplayer::state_is_client()));
+    app.add_systems(OnEnter(Multiplayer::Client), client_open_browser);
 
     app.run();
 }
