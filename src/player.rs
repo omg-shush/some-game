@@ -17,11 +17,14 @@ impl Plugin for PlayerPlugin {
         app.add_server_event::<PlayerSpawnEvent>(EventType::Ordered);
         app.add_client_event::<PlayerMoveEvent>(EventType::Ordered);
 
-        app.add_systems(Update, (player_joined, player_moved, handle_events_system).run_if(Multiplayer::state_is_server()));
+        app.add_systems(Update, (
+            handle_events_system.run_if(Multiplayer::state_is_server()),
+            (player_joined, player_moved).run_if(Multiplayer::state_is_authoritative())
+        ));
         app.init_resource::<ClientPlayers>();
 
-        app.add_systems(Update, (added_players, update, player_spawned, my_player).run_if(Multiplayer::state_is_client()));
-        app.add_systems(Update, join_server.run_if(resource_exists::<RenetClient>()));
+        app.add_systems(Update, (added_players, update, player_spawned, my_player).run_if(Multiplayer::state_is_playable()));
+        app.add_systems(Update, join_server.run_if(Multiplayer::state_is_playable()));
         app.init_resource::<ResClientId>();
     }
 }
@@ -32,7 +35,7 @@ pub struct Player {
     username: String
 }
 
-#[derive(Event, Serialize, Deserialize)]
+#[derive(Event, Serialize, Deserialize, Debug)]
 struct PlayerJoinEvent {
     username: String
 }
@@ -42,8 +45,10 @@ struct PlayerSpawnEvent {
     client_id: u32
 }
 
-fn join_server(client: Res<RenetClient>, mut connected: Local<bool>, mut writer: EventWriter<PlayerJoinEvent>, player_info: Res<PlayerInfo>) {
-    if !*connected && client.is_connected() {
+fn join_server(multiplayer: Res<State<Multiplayer>>, client: Option<Res<RenetClient>>, mut connected: Local<bool>, mut writer: EventWriter<PlayerJoinEvent>, player_info: Res<PlayerInfo>) {
+    let multiplayer_ready = *multiplayer == Multiplayer::Client && client.map_or(false, |c| c.is_connected());
+    let singleplayer_ready = *multiplayer == Multiplayer::Singleplayer;
+    if !*connected && (multiplayer_ready || singleplayer_ready) {
         *connected = true;
         info!("Sending PlayerJoinEvent!");
         writer.send(PlayerJoinEvent { username: player_info.username.to_owned() });
@@ -52,6 +57,7 @@ fn join_server(client: Res<RenetClient>, mut connected: Local<bool>, mut writer:
 
 fn player_joined(mut commands: Commands, mut reader: EventReader<FromClient<PlayerJoinEvent>>, mut writer: EventWriter<ToClients<PlayerSpawnEvent>>, mut mapping: ResMut<ClientPlayers>) {
     for evt in reader.read() {
+        info!("Received PlayerJoinEvent: {:?}", evt.event);
         let username = evt.event.username.to_owned();
         let client_id = evt.client_id.raw() as u32;
         let entity = commands.spawn((
@@ -123,7 +129,7 @@ struct ScoreText {}
 fn added_players(mut commands: Commands, query: Query<(Entity, &Player), Added<Player>>, asset_server: ResMut<AssetServer>) {
     for (entity, player) in query.iter() {
         if let Some(mut entity) = commands.get_entity(entity) {
-            entity.insert((
+            entity.try_insert((
                 Sprite {
                         anchor: Anchor::Center,
                         ..default()

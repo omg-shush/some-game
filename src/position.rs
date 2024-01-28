@@ -17,7 +17,7 @@ impl Plugin for PositionPlugin {
 impl PositionPlugin {
     fn added(mut commands: Commands, query: Query<(Entity, &Position), Added<Position>>) {
         for (entity, pos) in query.iter() {
-            commands.entity(entity).insert(
+            commands.entity(entity).try_insert(
                 TransformBundle::from_transform(Transform::from_translation(pos.translation))
             );
         }

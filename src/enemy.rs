@@ -51,7 +51,7 @@ fn added_enemies(mut commands: Commands, asset_server: Res<AssetServer>, mut new
     for (new_entity, new_enemy) in new_enemies.iter_mut() {
         let new_image: Handle<Image> = asset_server.load(&new_enemy.image);
         if let Some(mut entity) = commands.get_entity(new_entity) {
-            entity.insert((
+            entity.try_insert((
                 new_image,
                 VisibilityBundle::default(),
                 Sprite {

@@ -59,7 +59,7 @@ fn added_projectile(
     asset_server: Res<AssetServer>,
 ) {
     for (entity, projectile) in added.iter() {
-        commands.get_entity(entity).unwrap().insert((
+        commands.get_entity(entity).unwrap().try_insert((
             asset_server.load::<Image>("spark.png"),
             Sprite {
                 anchor: Anchor::Center,

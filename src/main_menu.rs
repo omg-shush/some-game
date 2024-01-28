@@ -35,7 +35,7 @@ impl MainMenuPlugin {
                     columns[0].label("Username");
                     columns[1].text_edit_singleline(&mut *username);
                 });
-                if ui.button("Singleplayer (WIP)").clicked() {
+                if ui.button("Singleplayer").clicked() {
                     multiplayer_state.set(Multiplayer::Singleplayer);
                     menu_state.set(MainMenu::InGame);
                     player_info.username = username.to_owned();
