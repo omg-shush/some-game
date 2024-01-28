@@ -40,7 +40,7 @@ impl MainMenuPlugin {
                     menu_state.set(MainMenu::InGame);
                     player_info.username = username.to_owned();
                 }
-                if ui.button("Host Multiplayer (WIP)").clicked() {
+                if ui.button("Host Multiplayer").clicked() {
                     multiplayer_state.set(Multiplayer::Server);
                     menu_state.set(MainMenu::InGame);
                     player_info.username = username.to_owned();

@@ -46,9 +46,9 @@ struct PlayerSpawnEvent {
 }
 
 fn join_server(multiplayer: Res<State<Multiplayer>>, client: Option<Res<RenetClient>>, mut connected: Local<bool>, mut writer: EventWriter<PlayerJoinEvent>, player_info: Res<PlayerInfo>) {
-    let multiplayer_ready = *multiplayer == Multiplayer::Client && client.map_or(false, |c| c.is_connected());
-    let singleplayer_ready = *multiplayer == Multiplayer::Singleplayer;
-    if !*connected && (multiplayer_ready || singleplayer_ready) {
+    let client_ready = *multiplayer == Multiplayer::Client && client.map_or(false, |c| c.is_connected());
+    let authoritative_ready = multiplayer.is_authoritative();
+    if !*connected && (client_ready || authoritative_ready) {
         *connected = true;
         info!("Sending PlayerJoinEvent!");
         writer.send(PlayerJoinEvent { username: player_info.username.to_owned() });
