@@ -1,16 +1,15 @@
 use bevy::prelude::*;
-use bevy_replicon::{client::ClientSet, replicon_core::replication_rules::AppReplicationExt, server::ServerSet};
+use bevy_replicon::replicon_core::replication_rules::AppReplicationExt;
 use serde::{Serialize, Deserialize};
 
-pub struct PositionPlugin {
-    pub is_server: bool
-}
+use crate::Multiplayer;
+
+pub struct PositionPlugin {}
 
 impl Plugin for PositionPlugin {
     fn build(&self, app: &mut App) {
-        if !self.is_server {
-            app.add_systems(Update, (Self::added, Self::update));
-        }
+        app.add_systems(Update, (Self::added, Self::update).run_if(Multiplayer::state_is_playable()));
+
         app.replicate::<Position>();
     }
 }
@@ -18,7 +17,7 @@ impl Plugin for PositionPlugin {
 impl PositionPlugin {
     fn added(mut commands: Commands, query: Query<(Entity, &Position), Added<Position>>) {
         for (entity, pos) in query.iter() {
-            commands.entity(entity).insert(
+            commands.entity(entity).try_insert(
                 TransformBundle::from_transform(Transform::from_translation(pos.translation))
             );
         }

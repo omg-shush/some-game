@@ -2,36 +2,79 @@
 <html>
     <head>
         <title>Some game</title>
+        <style>
+            html {
+                width: 100%;
+                min-width: 100%;
+                max-width: 100%;
+                height: 100%;
+                min-height: 100%;
+                max-height: 100%;
+                overflow: hidden;
+            }
+            body {
+                margin: 0px;
+                width: 100%;
+                min-width: 100%;
+                max-width: 100%;
+                height: 100%;
+                min-height: 100%;
+                max-height: 100%;
+                overflow: hidden;
+            }
+            #container {
+                width: 100%;
+                height: 100%;
+            }
+            #canvas {
+                position: absolute;
+                width: 100%;
+                height: 100%;
+            }
+            #loader {
+                z-index: -1000;
+                position: relative;
+                width: 5%;
+                height: fit-content;
+                left: 50%;
+                top: 50%;
+                transform: translate(-50%, -50%);
+            }
+            svg path, svg rect {
+                fill: #ff00d4;
+            }
+        </style>
     </head>
-    <style>
-        html {
-            width: 100%;
-            min-width: 100%;
-            max-width: 100%;
-            height: 100%;
-            min-height: 100%;
-            max-height: 100%;
-            overflow: hidden;
-        }
-        body {
-            margin: 0px;
-            width: 100%;
-            min-width: 100%;
-            max-width: 100%;
-            height: 100%;
-            min-height: 100%;
-            max-height: 100%;
-            overflow: hidden;
-        }
-        canvas {
-            background-color: black;
-        }
-    </style>
     <body>
         <script type="module">
             import initSync from './build/some-game.js';
             initSync();
         </script>
-        <canvas id="canvas"></canvas>
+        <div id="container">
+            <canvas id="canvas"></canvas>
+            <div id="loader">
+                <svg version="1.1" id="Layer_1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" x="0px" y="0px"
+                    viewBox="0 0 24 30" style="enable-background:new 0 0 50 50;" xml:space="preserve">
+                    <rect x="0" y="0" width="4" height="10" fill="#333">
+                        <animateTransform attributeType="xml"
+                            attributeName="transform" type="translate"
+                            values="0 0; 0 20; 0 0"
+                            begin="0" dur="0.6s" repeatCount="indefinite" />
+                    </rect>
+                    <rect x="10" y="0" width="4" height="10" fill="#333">
+                        <animateTransform attributeType="xml"
+                            attributeName="transform" type="translate"
+                            values="0 0; 0 20; 0 0"
+                            begin="0.2s" dur="0.6s" repeatCount="indefinite" />
+                    </rect>
+                    <rect x="20" y="0" width="4" height="10" fill="#333">
+                        <animateTransform attributeType="xml"
+                            attributeName="transform" type="translate"
+                            values="0 0; 0 20; 0 0"
+                            begin="0.4s" dur="0.6s" repeatCount="indefinite" />
+                    </rect>
+                </svg>
+            </div>
+        </div>
     </body>
 </html>

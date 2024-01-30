@@ -7,11 +7,13 @@ edition = "2021"
 
 [dependencies]
 bevy = "0.12.1"
-bevy-inspector-egui = "0.21.0"
+bevy-inspector-egui = "0.22.1"
+bevy_egui = "0.24.0"
 bevy_renet = "0.0.10"
 bevy_replicon = "=0.17.0"
 clap = { version = "4.4.12", features = ["derive"] }
 console_error_panic_hook = "0.1.7"
+egui = "0.25.0"
 js-sys = "0.3.66"
 rand = "0.8.5"
 serde = "1.0.193"

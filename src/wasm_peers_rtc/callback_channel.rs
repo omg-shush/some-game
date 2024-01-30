@@ -1,8 +1,8 @@
-use std::{rc::Rc, cell::RefCell, collections::VecDeque, error::Error};
+use std::error::Error;
 
 use js_sys::{Function, Promise, JSON};
 use serde::{Serialize, de::DeserializeOwned};
-use wasm_bindgen_futures::{JsFuture, spawn_local, future_to_promise};
+use wasm_bindgen_futures::JsFuture;
 use web_sys::{WebSocket, RtcDataChannel, MessageEvent};
 use wasm_bindgen::{prelude::wasm_bindgen, JsValue, closure::Closure, JsCast};
 
@@ -103,9 +103,7 @@ impl SendRecvCallbackChannel {
     }
 
     pub fn drain<T: DeserializeOwned>(&mut self) -> Result<Vec<T>, Box<dyn Error>> {
-        let mut queue = self.queue_receiver.drain();
-        let len = queue.len();
-        queue
+        self.queue_receiver.drain()
             .into_iter()
             .map(|m| {
                 serde_wasm_bindgen::from_value(m).map_err(|e| Box::new(e) as Box<dyn Error>)

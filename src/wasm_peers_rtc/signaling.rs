@@ -28,10 +28,10 @@ pub enum SignalingMessage {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ServerEntry {
-    name: String,
-    game: String
+    pub name: String,
+    pub game: String
 }
 
 #[derive(Serialize, Deserialize, Debug)]

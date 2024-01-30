@@ -3,19 +3,16 @@ use bevy_replicon::replicon_core::replication_rules::{AppReplicationExt, Replica
 use serde::{Serialize, Deserialize};
 use rand::prelude::*;
 
-use crate::{player::Player, position::Position};
+use crate::{player::Player, position::Position, Multiplayer};
 
-pub struct EnemyPlugin {
-    pub is_server: bool
-}
+pub struct EnemyPlugin {}
 
 impl Plugin for EnemyPlugin {
     fn build(&self, app: &mut App) {
-        if self.is_server {
-            app.add_systems(Update, (update_enemies, update_spawners));
-        } else {
-            app.add_systems(Update, added_enemies);
-        }
+        app.add_systems(Update, (update_enemies, update_spawners).run_if(Multiplayer::state_is_authoritative()));
+
+        app.add_systems(Update, added_enemies.run_if(Multiplayer::state_is_playable()));
+
         app.replicate::<Enemy>();
     }
 }
@@ -54,7 +51,7 @@ fn added_enemies(mut commands: Commands, asset_server: Res<AssetServer>, mut new
     for (new_entity, new_enemy) in new_enemies.iter_mut() {
         let new_image: Handle<Image> = asset_server.load(&new_enemy.image);
         if let Some(mut entity) = commands.get_entity(new_entity) {
-            entity.insert((
+            entity.try_insert((
                 new_image,
                 VisibilityBundle::default(),
                 Sprite {

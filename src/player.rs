@@ -1,16 +1,13 @@
-use std::{io::Cursor, collections::HashMap};
+use std::collections::HashMap;
 
-use bevy::{prelude::*, sprite::Anchor, ptr::Ptr, text::Text2dBounds};
-use bevy_replicon::{replicon_core::{replication_rules::{AppReplicationExt, self, Replication}, replicon_tick::RepliconTick}, bincode, network_event::{client_event::{ClientEventAppExt, FromClient}, EventType, server_event::{ServerEventAppExt, ToClients, SendMode}}};
+use bevy::{prelude::*, sprite::Anchor, text::Text2dBounds};
+use bevy_replicon::{replicon_core::replication_rules::{AppReplicationExt, Replication}, network_event::{client_event::{ClientEventAppExt, FromClient}, EventType, server_event::{ServerEventAppExt, ToClients, SendMode}}};
 use renet::{RenetClient, ClientId, ServerEvent};
 use serde::{Serialize, Deserialize};
 
-use crate::{Params, player_controller::PlayerController, wasm_peers_rtc::util::console_warn, position::Position};
-use crate::wasm_peers_rtc::util::js_warn;
+use crate::{player_controller::PlayerController, position::Position, Multiplayer, PlayerInfo};
 
-pub struct PlayerPlugin {
-    pub is_server: bool
-}
+pub struct PlayerPlugin {}
 
 impl Plugin for PlayerPlugin {
     fn build(&self, app: &mut App) {
@@ -19,13 +16,16 @@ impl Plugin for PlayerPlugin {
         app.add_client_event::<PlayerJoinEvent>(EventType::Ordered);
         app.add_server_event::<PlayerSpawnEvent>(EventType::Ordered);
         app.add_client_event::<PlayerMoveEvent>(EventType::Ordered);
-        if self.is_server {
-            app.add_systems(Update, (player_joined, player_moved, handle_events_system));
-            app.init_resource::<ClientPlayers>();
-        } else {
-            app.add_systems(Update, (join_server, added_players, update, player_spawned, my_player));
-            app.init_resource::<ResClientId>();
-        }
+
+        app.add_systems(Update, (
+            handle_events_system.run_if(Multiplayer::state_is_server()),
+            (player_joined, player_moved).run_if(Multiplayer::state_is_authoritative())
+        ));
+        app.init_resource::<ClientPlayers>();
+
+        app.add_systems(Update, (added_players, update, player_spawned, my_player).run_if(Multiplayer::state_is_playable()));
+        app.add_systems(Update, join_server.run_if(Multiplayer::state_is_playable()));
+        app.init_resource::<ResClientId>();
     }
 }
 
@@ -35,7 +35,7 @@ pub struct Player {
     username: String
 }
 
-#[derive(Event, Serialize, Deserialize)]
+#[derive(Event, Serialize, Deserialize, Debug)]
 struct PlayerJoinEvent {
     username: String
 }
@@ -45,15 +45,19 @@ struct PlayerSpawnEvent {
     client_id: u32
 }
 
-fn join_server(client: Res<RenetClient>, mut connected: Local<bool>, mut writer: EventWriter<PlayerJoinEvent>, params: Res<Params>) {
-    if !*connected && client.is_connected() {
+fn join_server(multiplayer: Res<State<Multiplayer>>, client: Option<Res<RenetClient>>, mut connected: Local<bool>, mut writer: EventWriter<PlayerJoinEvent>, player_info: Res<PlayerInfo>) {
+    let client_ready = *multiplayer == Multiplayer::Client && client.map_or(false, |c| c.is_connected());
+    let authoritative_ready = multiplayer.is_authoritative();
+    if !*connected && (client_ready || authoritative_ready) {
         *connected = true;
-        writer.send(PlayerJoinEvent { username: params.username.to_owned() });
+        info!("Sending PlayerJoinEvent!");
+        writer.send(PlayerJoinEvent { username: player_info.username.to_owned() });
     }
 }
 
 fn player_joined(mut commands: Commands, mut reader: EventReader<FromClient<PlayerJoinEvent>>, mut writer: EventWriter<ToClients<PlayerSpawnEvent>>, mut mapping: ResMut<ClientPlayers>) {
     for evt in reader.read() {
+        info!("Received PlayerJoinEvent: {:?}", evt.event);
         let username = evt.event.username.to_owned();
         let client_id = evt.client_id.raw() as u32;
         let entity = commands.spawn((
@@ -122,10 +126,10 @@ pub struct Score {
 #[derive(Component)]
 struct ScoreText {}
 
-fn added_players(mut commands: Commands, query: Query<(Entity, &Player), Added<Player>>, asset_server: ResMut<AssetServer>, params: Res<Params>) {
+fn added_players(mut commands: Commands, query: Query<(Entity, &Player), Added<Player>>, asset_server: ResMut<AssetServer>) {
     for (entity, player) in query.iter() {
         if let Some(mut entity) = commands.get_entity(entity) {
-            entity.insert((
+            entity.try_insert((
                 Sprite {
                         anchor: Anchor::Center,
                         ..default()
@@ -138,12 +142,14 @@ fn added_players(mut commands: Commands, query: Query<(Entity, &Player), Added<P
                     text: Text::from_section(player.username.to_owned(), TextStyle { font: asset_server.load("OpenSans-Regular.ttf"), font_size: 32., color: Color::WHITE }),
                     text_anchor: Anchor::BottomCenter,
                     text_2d_bounds: Text2dBounds::UNBOUNDED,
+                    transform: Transform::from_translation(Vec3::Z),
                     ..default()
                 });
                 parent.spawn((ScoreText {}, Text2dBundle {
                     text: Text::from_section("0".to_owned(), TextStyle { font: asset_server.load("OpenSans-Regular.ttf"), font_size: 24., color: Color::WHITE }),
                     text_anchor: Anchor::TopCenter,
                     text_2d_bounds: Text2dBounds::UNBOUNDED,
+                    transform: Transform::from_translation(Vec3::Z),
                     ..default()
                 }));
             });
@@ -179,7 +185,7 @@ fn player_moved(mut reader: EventReader<FromClient<PlayerMoveEvent>>, mapping: R
             Some(())
         }
         if player_move(&mapping, evt.client_id, &mut players, evt.event.delta).is_none() {
-            console_warn!("Failed to handle PlayerMoveEvent");
+            warn!("Failed to handle PlayerMoveEvent");
         };
     }
 }
